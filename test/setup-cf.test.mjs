@@ -98,7 +98,7 @@ function runSetupInPty(fixture, { importAnswer = 'y\r', selection = ' \r' } = {}
     const timeout = setTimeout(() => child.kill('SIGKILL'), 15000);
     child.stdout.on('data', chunk => {
       stdout += chunk.toString();
-      if (!importSent && stdout.includes("Include destinations from the current CF space's Destination service? [y/N]")) {
+      if (!importSent && stdout.includes("Include destinations from the current CF space's Destination service?")) {
         importSent = true;
         child.stdin.write(importAnswer);
       }

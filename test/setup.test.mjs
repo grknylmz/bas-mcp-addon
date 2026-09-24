@@ -181,8 +181,10 @@ test('global postinstall completes BAS selection before optional Copilot assets'
     H2O_URL: `http://127.0.0.1:${server.address().port}`,
     HTTP_PROXY: '',
     http_proxy: '',
-    NO_PROXY: '127.0.0.1,localhost'
+    NO_PROXY: '127.0.0.1,localhost',
+    FORCE_COLOR: '1'
   };
+  delete env.NO_COLOR;
   delete env.npm_config_ignore_scripts;
   t.after(async () => {
     await new Promise(resolve => server.close(resolve));
@@ -196,8 +198,13 @@ test('global postinstall completes BAS selection before optional Copilot assets'
   const declineLogs = `${declined.stdout}\n${declined.stderr}`;
   assert.match(declineLogs, /Configured 0 MCP servers/);
   assert.match(declineLogs, /\[Y\/n\]/);
-  assert.match(declineLogs, /Copilot agent and skill installation declined/);
-  assert.ok(declineLogs.indexOf('Install the ABAP Developer agent and six skills') > declineLogs.indexOf('Configured 0 MCP servers'), declineLogs);
+  assert.match(declineLogs, /Press Enter to install the ABAP Developer agent and six skills in the path shown below; type n then press Enter to skip/);
+  assert.match(declineLogs, /🤖 bas-mcp-addon/);
+  assert.match(declineLogs, /\u001b\[1;35m/);
+  assert.match(declineLogs, /Optional Copilot setup is waiting for your choice/);
+  assert.match(declineLogs, /Copilot agent and skills were skipped\. Your files were not changed/);
+  assert.ok(declineLogs.indexOf('Optional Copilot setup is waiting for your choice') > declineLogs.indexOf('Configured 0 MCP servers'), declineLogs);
+  assert.ok(declineLogs.indexOf('Install the ABAP Developer agent and six skills') > declineLogs.indexOf('Optional Copilot setup is waiting for your choice'), declineLogs);
   const configAfterDecline = JSON.parse(await readFile(config, 'utf8'));
   assert.equal(Object.values(configAfterDecline.servers).filter(entry => entry.BAS_EXT === 'true').length, 0);
   await assert.rejects(stat(join(directory, '.copilot')), { code: 'ENOENT' });
@@ -208,7 +215,7 @@ test('global postinstall completes BAS selection before optional Copilot assets'
   assert.equal(accepted.assetsAnswerSent, true, accepted.stdout);
   const acceptLogs = `${accepted.stdout}\n${accepted.stderr}`;
   assert.ok(acceptLogs.indexOf('Install the ABAP Developer agent and six skills') > acceptLogs.indexOf('Configured 1 MCP server'), acceptLogs);
-  assert.match(acceptLogs, /installed 7 Copilot agent\/skill file\(s\)/);
+  assert.match(acceptLogs, /Installed 7 Copilot files/);
   const configAfterAccept = JSON.parse(await readFile(config, 'utf8'));
   assert.deepEqual(Object.values(configAfterAccept.servers)
     .filter(entry => entry.BAS_EXT === 'true')
@@ -278,7 +285,7 @@ test('postinstall skips optional Copilot assets without an interactive terminal'
     });
     const logs = `${result.stdout}\n${result.stderr}`;
     assert.equal(result.code, 0, logs);
-    assert.match(logs, /optional Copilot agent and skill installation skipped because no interactive terminal/);
+    assert.match(logs, /Optional Copilot installation skipped because no interactive terminal/);
     await assert.rejects(stat(join(env.HOME, '.copilot')), { code: 'ENOENT' });
     await assert.rejects(stat(join(directory, '.github')), { code: 'ENOENT' });
     await assert.rejects(readFile(config), { code: 'ENOENT' });

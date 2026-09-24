@@ -174,9 +174,9 @@ The installer handles two setup tasks automatically:
 - Looks for Go in `GO_BINARY`, `PATH`, or the package-local Go installation. If none is available, it downloads and installs the pinned supported Go release without prompting.
 - Uses the package's checksum-verified patched VSP binary for the current platform. A remote download is the fallback only when the package has no bundled asset.
 
-With `H2O_URL` set, an interactive install opens a checkbox picker with no destinations selected by default. Use **Space** to choose destinations and **Enter** to confirm. Press **a** to toggle all destinations (select all if any are unchecked; otherwise clear the selection). Confirming with none selected removes this add-on's managed MCP entries. When the `cf` CLI 8.18 or newer is authenticated to a targeted space, setup first offers an optional import from that space's Destination service; the prompt defaults to **No**. Accepted CF and BAS destinations appear together in the picker. npm may run its install hook without an interactive terminal, even when the shell is interactive; in that case, selection is skipped without changing MCP config.
+With `H2O_URL` set, an interactive install opens a checkbox picker with no destinations selected by default. Use **Space** to choose destinations and **Enter** to confirm. Press **a** to toggle all destinations (select all if any are unchecked; otherwise clear the selection). Confirming with none selected removes this add-on's managed MCP entries. When the `cf` CLI 8.18 or newer is authenticated to a targeted space, setup first offers an optional import from that space's Destination service; type **y** then **Enter** to include it, or press **Enter** to skip. Accepted CF and BAS destinations appear together in the picker. npm may run its install hook without an interactive terminal, even when the shell is interactive; in that case, selection is skipped without changing MCP config.
 
-The setup report identifies each selected destination's source and, for CF entries, the Destination service instance. The colored status table is a weather report, not a bouncer: green means the ADT probe responded, red means it failed, and yellow means it was skipped. Probe failures do not block MCP registration or startup for destinations you select.
+The setup report uses icons and terminal colors; set `NO_COLOR=1` to disable ANSI colors. The table is a weather report, not a bouncer: green **PASS** means the ADT probe responded, red **FAIL** means it failed, and yellow **SKIPPED** means it was skipped. Probe failures do not block MCP registration or startup for destinations you select.
 
 Run `bas-vsp-mcp --setup` later to change the selection or remove generated entries. Use `--npx` to make the generated entries start the pinned package through npm instead of relying on a global `bas-vsp-mcp` command.
 
@@ -235,7 +235,7 @@ The package includes a user-invocable **ABAP Developer** custom agent and six ta
 
 ### 📥 Install for your BAS user
 
-After destination setup, an interactive global install offers to install the agent and all six skills under `$HOME/.copilot`. The prompt defaults to yes: press **Enter** to install or **n** then **Enter** to decline. Declining leaves those files unchanged.
+After destination setup, the installer prints a 🤖 notice that it is waiting for confirmation, then offers to install the agent and all six skills under `$HOME/.copilot`. Press **Enter** to install; type **n** then **Enter** to skip. Declining leaves those files unchanged.
 
 These user-level customizations are available across workspaces opened by the same BAS user in the same dev space. Copilot must be available in BAS and may need a window reload to discover new files. A non-interactive install skips the optional prompt; `npm install --ignore-scripts` skips the postinstall wizard entirely.
 

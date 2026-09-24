@@ -2,6 +2,7 @@ import checkbox from '@inquirer/checkbox';
 import { createInterface } from 'node:readline/promises';
 import { stdin, stdout } from 'node:process';
 import { Writable } from 'node:stream';
+import { colorText, formatStatus } from './terminal-ui.mjs';
 import { discoverDestinations, remediation } from './bas-discovery.mjs';
 import { discoverCloudFoundryDestinations, getCloudFoundryTarget, deleteManagedCloudFoundryServiceKeys } from './cf-destination.mjs';
 import { collectCloudFoundryKeyReferencesFromAllEntries, collectManagedCloudFoundryKeyReferences, installMcpConfig, readMcpConfig, resolveMcpConfigPath } from './mcp-config.mjs';
@@ -16,7 +17,8 @@ function print(output, message) {
 async function confirmCloudFoundryImport({ input = stdin, output = stdout } = {}) {
   const readline = createInterface({ input, output });
   try {
-    const answer = await readline.question("Include destinations from the current CF space's Destination service? [y/N] ");
+    print(output, formatStatus("Optional import from the current space's Destination service.", 'step', output, 'Cloud Foundry'));
+    const answer = await readline.question("Include destinations from the current CF space's Destination service? (y + Enter = import; Enter = skip) ");
     return /^y(?:es)?$/i.test(answer.trim());
   } finally {
     readline.close();
@@ -71,16 +73,15 @@ function safeCloudFoundryDestination(destination) {
 function printConnectionInstructions(output, result) {
   const servers = Object.entries(result?.servers || {});
   if (!servers.length) {
-    print(output, 'No package-owned MCP servers are configured.');
+    print(output, formatStatus('No destinations were selected; no MCP servers were added.', 'info', output, 'BAS setup'));
     return;
   }
-  print(output, 'MCP servers now available:');
+  print(output, colorText('📡 MCP servers now available:', 'cyan', output));
   for (const [name, entry] of servers) {
-    print(output, `- ${name} (destination=${entry.env?.BAS_VSP_DESTINATION || 'unknown'})`);
+    print(output, `  • ${name} — destination: ${entry.env?.BAS_VSP_DESTINATION || 'unknown'}`);
   }
-  print(output, 'To connect in BAS/VS Code: open the Command Palette, run “MCP: List Servers”,');
-  print(output, 'select the generated server name listed above, and choose Start Server.');
-  print(output, 'Use “MCP: Open User Configuration” to inspect or edit the generated entries.');
+  print(output, formatStatus('Open the Command Palette → “MCP: List Servers”, select a generated server, and choose “Start Server”.', 'step', output, 'Next'));
+  print(output, formatStatus('Inspect or edit entries with “MCP: Open User Configuration”.', 'info', output, 'Config'));
 }
 
 
@@ -94,13 +95,14 @@ export async function runSetup({
   install = installMcpConfig
 } = {}) {
   if (!env.H2O_URL) {
-    print(output, `BAS setup skipped: H2O_URL is not set. Run ${SETUP_COMMAND} in a BAS dev space.`);
+    print(output, formatStatus(`Setup skipped: H2O_URL is not set. Run ${SETUP_COMMAND} in a BAS dev space.`, 'info', output, 'BAS setup'));
     return { skipped: true, reason: 'non-bas' };
   }
   if (!input.isTTY || !output.isTTY) {
-    print(output, `BAS setup requires an interactive terminal. Rerun with ${SETUP_COMMAND}.`);
+    print(output, formatStatus(`Interactive setup needs a terminal. Rerun ${SETUP_COMMAND} from a BAS terminal.`, 'warning', output, 'BAS setup'));
     return { skipped: true, reason: 'non-tty' };
   }
+  print(output, formatStatus('Contacting BAS to discover destinations; this may take a moment.', 'progress', output, 'Setup'));
 
   let basDestinations;
   try {
@@ -131,6 +133,7 @@ export async function runSetup({
       warnings.push('Cloud Foundry import prompt failed; CF destinations were skipped.');
     }
     if (shouldImport) {
+      print(output, formatStatus('Reading destinations from Cloud Foundry.', 'progress', output, 'Cloud Foundry'));
       try {
         const result = await discoverCf({ env, input, output, spaceGuid: target.spaceGuid, managedKeys });
         createdKeys = Array.isArray(result?.createdKeys) ? result.createdKeys : [];
@@ -146,7 +149,7 @@ export async function runSetup({
   }
 
   const reportWarnings = async messages => {
-    for (const message of messages) print(output, `Warning: ${message}`);
+    for (const message of messages) print(output, formatStatus(message, 'warning', output, 'Warning'));
   };
   const cleanupKeys = async (keys, config) => {
     const referenced = collectCloudFoundryKeyReferencesFromAllEntries(config);
@@ -163,6 +166,7 @@ export async function runSetup({
   };
   const selectable = destinations.filter(destination => !destination.disabledReason);
   if (!selectable.length) {
+    print(output, formatStatus('No selectable BAS or Cloud Foundry destinations were found.', 'warning', output, 'Setup'));
     print(output, remediation);
     await reportWarnings(warnings);
     const cleanupWarnings = await cleanupNewKeysWithoutConfigChange();
@@ -184,14 +188,15 @@ export async function runSetup({
       checked: false
     };
   });
-  print(output, 'No destinations are selected by default. Use Space to choose destinations, a to toggle all, and Enter to confirm.');
+  print(output, formatStatus('Choose the destinations to add.', 'step', output, 'Setup'));
+  print(output, '  Space = select/deselect · a = toggle all · Enter = confirm. Nothing selected removes this add-on’s MCP entries.');
   const promptOutput = new Writable({
     write(chunk, encoding, callback) {
       output.write(chunk, encoding, callback);
     }
   });
   const selected = await checkbox({
-    message: 'Select destinations',
+    message: colorText('🧭 Select destinations', 'cyan', output),
     choices,
     required: false,
     shortcuts: { all: 'a', invert: null }
@@ -199,7 +204,7 @@ export async function runSetup({
   try {
     const result = await install(selected, { env });
     const location = result?.path ? ` in ${result.path}` : '';
-    print(output, `Configured ${selected.length} MCP server${selected.length === 1 ? '' : 's'}${location}.`);
+    print(output, formatStatus(`Configured ${selected.length} MCP server${selected.length === 1 ? '' : 's'}${location}.`, 'success', output, 'BAS setup'));
     printConnectionInstructions(output, result);
     let cleanupWarnings = [];
     const finalPath = result?.path || configPath;

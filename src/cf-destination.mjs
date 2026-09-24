@@ -7,6 +7,7 @@ import checkbox from '@inquirer/checkbox';
 import { ProxyAgent, fetch as undiciFetch } from 'undici';
 import { sanitizeChildEnv } from './bas-discovery.mjs';
 import { createCfConnectivityProxy } from './cf-connectivity.mjs';
+import { colorText } from './terminal-ui.mjs';
 
 const REQUEST_TIMEOUT_MS = 10_000;
 const COMMAND_TIMEOUT_MS = 30_000;
@@ -314,7 +315,7 @@ function promptOutput(output) {
 async function chooseInstances(instances, { input = stdin, output = stdout, message }) {
   if (instances.length === 1) return instances;
   const selected = await checkbox({
-    message,
+    message: colorText(`☁️ ${message}`, 'cyan', output),
     choices: instances.map(instance => ({
       value: instance,
       name: `${instance.name || instance.guid} (${instance.guid})`,
@@ -329,7 +330,7 @@ async function chooseInstances(instances, { input = stdin, output = stdout, mess
 async function chooseConnectivity(instances, { input = stdin, output = stdout }) {
   if (instances.length === 1) return instances[0];
   const selected = await checkbox({
-    message: 'Select one Connectivity service instance',
+    message: colorText('🔌 Select one Connectivity service instance', 'cyan', output),
     choices: instances.map(instance => ({ value: instance, name: `${instance.name || instance.guid} (${instance.guid})`, checked: false })),
     required: false,
     validate: values => values.length <= 1 || 'Select at most one Connectivity service instance',
