@@ -203,6 +203,8 @@ One selected system, one isolated stdio MCP entry. Here's the shape:
 }
 ```
 
+The MCP protocol `serverInfo.name` matches `BAS_VSP_DESTINATION`, so each wizard-generated destination has its own identity instead of the shared `bas-mcp-addon` name.
+
 Credentials, cookies, SAP usernames, passwords, and raw BAS destination payloads are not written to the MCP configuration.
 
 ## ⚙️ MCP configuration location

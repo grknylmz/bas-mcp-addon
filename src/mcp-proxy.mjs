@@ -364,7 +364,7 @@ export class MCPProxy {
     try {
       if (message.method === 'initialize') {
         await this.initializeChildren(message.params || {});
-        return rpcResult(message.id, { protocolVersion: message.params?.protocolVersion || '2024-11-05', capabilities: { tools: {} }, serverInfo: { name: 'bas-mcp-addon', version: '0.1.0' } });
+        return rpcResult(message.id, { protocolVersion: message.params?.protocolVersion || '2024-11-05', capabilities: { tools: {} }, serverInfo: { name: this.env.BAS_VSP_DESTINATION || this.children[0].destination.name, version: '0.1.0' } });
       }
       if (!this.initialized) return rpcError(message.id, -32002, 'MCP proxy is not initialized');
       if (message.method === 'tools/list') return rpcResult(message.id, { tools: await this.mergedTools() });
