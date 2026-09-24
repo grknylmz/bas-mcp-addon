@@ -5,6 +5,10 @@ description: Design ABAP Unit behavior tests and validate ABAP changes with lint
 
 # ABAP testing and quality
 
+## Tool selection
+
+Query the active MCP server's live `tools/list` once, then use only task-relevant, destination-prefixed tools with their returned schemas: `LintABAP` for caller-supplied source, `SyntaxCheck` for SAP syntax validation, `RunUnitTests` for ABAP Unit, and `RunATCCheck` for ATC. Unavailable tools are not passes.
+
 - Treat ABAP Unit as behavior verification: assert externally observable results, boundaries, state transitions, and relevant error behavior. Static analysis and syntax checks find different classes of problems and do not replace behavior tests.
 - For a behavior change, create or refine a real ABAP Unit assertion first, run it to observe the regression, then rerun after implementation. If an executable red/green cycle is unavailable, state the concrete constraint and the strongest check actually performed; never report a substitute as a passing test.
 - Run the live destination-prefixed `LintABAP` MCP tool on all relevant caller-supplied source files, using abapGit-style filenames and including required dependency sources. The tool analyzes only the files supplied to it; it does not read the workspace or resolve dependencies.

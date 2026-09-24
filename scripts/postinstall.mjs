@@ -6,8 +6,7 @@ import { ensureGo } from './ensure-go.mjs';
 import { installBinary } from '../src/binary.mjs';
 import { runSetup } from '../src/setup.mjs';
 import { installUserCopilotAssets } from './install-user-copilot-assets.mjs';
-import checkbox from '@inquirer/checkbox';
-import { Writable } from 'node:stream';
+import { createInterface } from 'node:readline/promises';
 import { ReadStream as TTYReadStream, WriteStream as TTYWriteStream } from 'node:tty';
 import { homedir } from 'node:os';
 
@@ -70,19 +69,14 @@ async function runCopilotAssetInstall() {
       return;
     }
     const copilotRoot = join(process.env.HOME || homedir(), '.copilot');
-    const selected = await checkbox({
-      message: 'Optional Copilot agent and skill installation',
-      choices: [{ name: `Install the ABAP Developer agent and six skills in "${copilotRoot}"`, value: 'install', checked: false }],
-      required: false
-    }, {
-      input: terminal.input,
-      output: new Writable({
-        write(chunk, encoding, callback) {
-          terminal.output.write(chunk, encoding, callback);
-        }
-      })
-    });
-    if (!selected.includes('install')) {
+    const prompt = createInterface({ input: terminal.input, output: terminal.output });
+    let answer;
+    try {
+      answer = await prompt.question(`Install the ABAP Developer agent and six skills in "${copilotRoot}"? [Y/n] `);
+    } finally {
+      prompt.close();
+    }
+    if (/^n(?:o)?$/i.test(answer.trim())) {
       await announce('bas-mcp-addon: Copilot agent and skill installation declined; user files were not changed.');
       return;
     }

@@ -5,6 +5,10 @@ description: Diagnose ABAP runtime failures using SAP dumps, application logs, t
 
 # ABAP debugging
 
+## Tool shortlist
+
+Query the active MCP server's live `tools/list` once; use the destination-prefixed tool and schema for the target. Start with `ListDumps` → `GetDump`; add `GetApplicationLog`, `GetTrace`, or `GetSQLTraceState` when they match the failure. Trace code with `GetSource`, `GetCallersOf`, `GetCalleesOf`, or `GetCallGraph`. For an authorized reproduction, use `SetBreakpoint` and `DebuggerListen`, inspect with `DebuggerGetStack` / `DebuggerGetVariables`, step with `DebuggerStep`, and finish with `DebuggerDetach`. Avoid attaching to another user's session.
+
 1. Reproduce the reported failure when safe and within the requested target. Establish the observed input, outcome, and execution context before changing code.
 2. Inspect relevant dumps, application logs, traces, call/reference context, and debugger state using only the current live MCP tool listing and schemas. Correlate evidence to the failing path before proposing a cause.
 3. Keep debugger sessions and execution bounded. Do not change business data or attach to, interrupt, or alter another user's session. Prefer read-only diagnostics unless a change is specifically authorized.

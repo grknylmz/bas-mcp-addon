@@ -1,10 +1,38 @@
-# BAS MCP Addon
+# 🧭 BAS MCP Addon
 
-`bas-mcp-addon` installs `bas-vsp-mcp`, a small switchboard between BAS destinations and MCP clients. It discovers named destinations, checks their ADT endpoints through the BAS proxy, and exposes a curated VSP tool set over the Model Context Protocol (MCP).
+<p align="center">
+  <strong>End-to-end ABAP development from GitHub Copilot Chat in SAP Business Application Studio.</strong><br>
+  A destination-aware MCP bridge between BAS, SAP ADT, and your AI coding agent.
+</p>
+
+<p align="center">
+  <a href="https://www.npmjs.com/package/bas-mcp-addon"><img src="https://img.shields.io/npm/v/bas-mcp-addon?color=0A6ED1&logo=npm&logoColor=white" alt="npm version"></a>
+  <img src="https://img.shields.io/badge/Node.js-%E2%89%A520-339933?logo=nodedotjs&logoColor=white" alt="Node.js 20 or newer">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-75B900.svg" alt="MIT License"></a>
+  <img src="https://img.shields.io/badge/MCP-enabled-7B61FF" alt="MCP enabled">
+</p>
+
+`bas-mcp-addon` installs `bas-vsp-mcp`, which discovers BAS destinations and exposes a curated VSP tool set over the Model Context Protocol (MCP).
+
+## 🚀 Fully automated ABAP development
+
+Describe a task in Copilot Chat; the **ABAP Developer** agent coordinates the live MCP tools to inspect SAP objects and dependencies, implement the requested change, run relevant checks, and report what actually happened. No hand-written MCP calls or terminal commands for each SAP operation.
+
+**💬 Request → 🔎 Inspect → 🧑‍💻 Implement → 🧪 Verify → 📋 Report**
+
+The workflow covers ABAP, CDS, RAP, debugging, quality checks, and transport preparation. Tool availability depends on the connected SAP system and VSP mode; the agent checks the live tool list and reports checks it could not run.
+
+> 🔐 **SAP changes stay controlled.** The agent only performs state-changing work when requested and the destination and required target details are known. Activation, service publication, and transport creation require explicit authorization. SAP permissions still apply; transport release and deletion are not exposed by this add-on.
+
+**✨ At a glance:** BAS destination routing · Copilot agent + six focused skills · ABAP Unit, lint, syntax, and ATC workflows · destination-isolated MCP servers
+
+**Quick links:** [Install](#install) · [ABAP agent & skills](#copilot-agent) · [BAS setup](#bas) · [Tool catalog](#tools) · [Troubleshooting](#troubleshooting)
 
 Bring Node.js 20 or newer. If Go isn't already available, the installer takes care of it.
 
-## Installation
+<a id="install"></a>
+
+## 📦 Installation
 
 Install globally from a BAS dev space:
 
@@ -51,15 +79,43 @@ Once setup is complete, the installer prints each generated MCP server name besi
 
 Use **MCP: Open User Configuration** to inspect or edit the generated entries. Each entry is isolated to its displayed `BAS_VSP_DESTINATION`.
 
-## GitHub Copilot ABAP agent and skills
+<a id="copilot-agent"></a>
 
-VS Code Copilot supports user-level custom agents in `~/.copilot/agents/` and Agent Skills in `~/.copilot/skills/` ([custom agents](https://code.visualstudio.com/docs/agent-customization/custom-agents), [Agent Skills](https://code.visualstudio.com/docs/agent-customization/agent-skills)). After BAS destination selection (or its skip message), an interactive global install opens an optional checkbox prompt for the ABAP Developer agent and all six skills under `$HOME/.copilot`. Press Space to select the install option and Enter to install; press Enter without selecting it to skip. Declining leaves those files unchanged.
+## 🤖 GitHub Copilot ABAP agent and skills
 
-These user-level customizations are available across workspaces opened by the same BAS user in the same dev space. They are not copied into each repository and are not shared with other users or separate dev spaces. Copilot must be available in BAS and may need a window reload to discover newly installed files. A non-interactive install skips the optional prompt; `npm install --ignore-scripts` skips the postinstall wizard entirely.
+The package includes a user-invocable [**ABAP Developer**](.github/agents/abap-developer.agent.md) custom agent and six task-focused Agent Skills for VS Code Copilot ([custom agents](https://code.visualstudio.com/docs/agent-customization/custom-agents), [Agent Skills](https://code.visualstudio.com/docs/agent-customization/agent-skills)).
+
+### 🧠 How the agent works
+
+1. **Understand the request.** Establish the expected behavior and, for SAP changes, the destination, package, and transport or temporary target. Ask only when a material detail is missing.
+2. **Inspect before editing.** Read relevant source, tests, callers, dependencies, and conventions; query the active MCP server's live `tools/list` and use its exact destination-prefixed tools and schemas.
+3. **Implement with behavior in mind.** Add or refine an ABAP Unit assertion first when an executable regression test is available, then make the smallest change that meets the request.
+4. **Verify with available checks.** Use `LintABAP` for caller-supplied source, BAS editor LSP diagnostics when configured, and SAP `SyntaxCheck`, `RunUnitTests`, and `RunATCCheck` when exposed and relevant. Lint and syntax checks do not replace behavior tests.
+5. **Protect SAP state.** Only make requested changes. Activate objects or publish services only when asked; create transports only when explicitly authorized. Release and deletion of transports are unavailable through this add-on.
+6. **Report observed results.** Summarize changed objects and actual validation, activation, or publication outcomes. Identify skipped checks and exact blockers; never claim a check passed if it did not run.
+
+### 🧩 Included Agent Skills
+
+| Skill | Focus |
+| --- | --- |
+| [`abap-development`](.github/skills/abap-development/SKILL.md) | Implement and refactor ABAP reports, classes, interfaces, and function groups. |
+| [`abap-testing-quality`](.github/skills/abap-testing-quality/SKILL.md) | ABAP Unit behavior tests, lint, LSP diagnostics, syntax checks, and ATC. |
+| [`cds-development`](.github/skills/cds-development/SKILL.md) | Model CDS definitions and inspect dependencies and consumers. |
+| [`rap-development`](.github/skills/rap-development/SKILL.md) | Build RAP business objects and services; publish only when requested. |
+| [`abap-debugging`](.github/skills/abap-debugging/SKILL.md) | Diagnose dumps, application logs, traces, and runtime failures. |
+| [`sap-transport-release`](.github/skills/sap-transport-release/SKILL.md) | Check dependencies and prepare changes for transport; release is not available here. |
+
+### 📥 Install for your BAS user
+
+After destination setup, an interactive global install offers to install the agent and all six skills under `$HOME/.copilot`. The prompt defaults to yes: press Enter to install or `n` then Enter to decline. Declining leaves those files unchanged.
+
+These user-level customizations are available across workspaces opened by the same BAS user in the same dev space. Copilot must be available in BAS and may need a window reload to discover new files. A non-interactive install skips the optional prompt; `npm install --ignore-scripts` skips the postinstall wizard entirely.
 
 On reinstall or package upgrade, unchanged add-on-managed files are updated. Existing customizations and files edited since the previous install are preserved; postinstall reports paths that need manual review instead of overwriting them.
 
-For repository-scoped customizations committed with a project, copy the packaged files from the BAS workspace root without overwriting existing files:
+### 🗂️ Add the agent and skills to a repository
+
+To commit repository-scoped customizations, copy the packaged files from the BAS workspace root without overwriting existing files:
 
 ```sh
 ADDON_ROOT="$(npm root -g)/bas-mcp-addon"
@@ -68,9 +124,11 @@ cp -n "$ADDON_ROOT/.github/agents/abap-developer.agent.md" .github/agents/
 cp -Rn "$ADDON_ROOT/.github/skills/." .github/skills/
 ```
 
-Review skipped or conflicting files and merge changes manually. `LintABAP` is the addon's MCP lint tool and analyzes caller-supplied source in memory. `vsp lsp --stdio` supplies editor diagnostics separately and does not appear in MCP `tools/list`. The agent uses SAP `SyntaxCheck`, `RunUnitTests`, and `RunATCCheck` when those tools are available from the active destination.
+Review skipped or conflicting files and merge changes manually. `LintABAP` analyzes caller-supplied source in memory; it does not read workspace files. `vsp lsp --stdio` supplies editor diagnostics separately and does not appear in MCP `tools/list`.
 
-## BAS setup
+<a id="bas"></a>
+
+## 🧭 BAS setup
 
 `bas-vsp-mcp --setup` reads destination names from `H2O_URL/api/listDestinations`, then gives each destination's `/sap/bc/adt/discovery` endpoint a quick knock through the BAS proxy. HTTP 2xx, 401, and 403 count as reachable; other responses and network failures are reported but do not exclude discovered destinations from the selection list or prevent startup when selected.
 
@@ -78,7 +136,7 @@ Interactive npm install and `bas-vsp-mcp --setup` both use a checkbox picker wit
 
 Setup tidies its own footprint: it reconciles MCP entries managed by this package and removes its legacy `basVspMcp_*` entries. Existing unrelated MCP servers and top-level configuration such as `inputs` stay untouched.
 
-### BAS destination example
+### 🌐 BAS destination example
 
 First, give BAS a route to your backend: create the destination in **BTP Cockpit → Connectivity → Destinations** in the subaccount where BAS runs.
 The sample values sketch an on-premise ABAP backend routed through SAP Cloud Connector; swap in the URL, proxy type, and authentication configured for your landscape.
@@ -128,7 +186,7 @@ The add-on probes `http://<Name>.dest/sap/bc/adt/discovery` through the BAS prox
 See [SAP Help: Create a Destination to Connect to SAP Business Application Studio](https://help.sap.com/docs/PRODUCT_ID/e0cd7c1ecf3d4f2f9feb46ec1c5b68fb/0af2819bbe064a3da455753c8518dd81.html) and
 [Creating a Destination to an ABAP System for BAS](https://help.sap.com/docs/btp/sap-business-technology-platform/creating-destination-to-abap-system-for-sap-business-application-studio).
 
-### Generated MCP server entry
+### 🔌 Generated MCP server entry
 
 One selected system, one isolated stdio MCP entry. Here's the shape:
 
@@ -147,7 +205,7 @@ One selected system, one isolated stdio MCP entry. Here's the shape:
 
 Credentials, cookies, SAP usernames, passwords, and raw BAS destination payloads are not written to the MCP configuration.
 
-## MCP configuration location
+## ⚙️ MCP configuration location
 
 The configuration path is selected in this order:
 
@@ -165,7 +223,7 @@ BAS_VSP_MCP_CONFIG="$HOME/.vscode/data/User/mcp.json" bas-vsp-mcp --setup
 
 The file must be strict JSON with an object-valued `servers` property. Existing malformed or incompatible files are rejected without overwriting them.
 
-## Commands
+## 🛠️ Commands
 
 Need the options without starting the MCP server?
 
@@ -202,7 +260,7 @@ The proxy exposes its curated baseline plus the VSP tools listed in [tools.md](t
 
 Without `H2O_URL`, the command passes arguments directly to the installed VSP binary—no BAS proxy detour.
 
-## How an MCP tool call reaches SAP
+## 🔄 How an MCP tool call reaches SAP
 
 `bas-vsp-mcp` is an MCP **stdio server and destination router**, not a terminal command for individual SAP operations. No shell incantations needed: your MCP client discovers the tools, picks one for the chat request, and sends the call over stdio.
 
@@ -236,11 +294,13 @@ Each generated MCP server entry uses its BAS destination name verbatim: `DEMO_AB
 
 The proxy keeps VSP tool descriptions and input schemas, then adds the destination label. `LintABAP` is the exception: it is implemented locally and uses the shared input schema shown by `tools/list`. It lints only submitted source in memory; it does not read the workspace, call SAP, or load configured external dependencies. Supply every dependency source file in `files`. The live `tools/list` result remains the source of truth for the installed VSP binary's exact schemas.
 
-## Tool catalog
+<a id="tools"></a>
+
+## 🧰 Tool catalog
 
 The menu includes the existing curated VSP tools, additions listed in [tools.md](tools.md) when registered by the active VSP mode, the `GetApplicationLog` mapping, and local `LintABAP`. Focused mode may omit `ActivateMultiple`, `GetUserTransports`, and `GetTransportInfo`; the live `tools/list` result remains authoritative.
 
-### Lint submitted ABAP source locally
+### 🧹 Lint submitted ABAP source locally
 
 The per-destination tool name is `<destination-slug>__LintABAP`, for example `demo-abap__LintABAP`. It accepts caller-supplied abapGit-serialized source files; `config` is optional and, when present, is the full abaplint configuration rather than a merge with defaults.
 
@@ -259,7 +319,7 @@ The per-destination tool name is `<destination-slug>__LintABAP`, for example `de
 
 The single text item in the MCP result contains JSON: `{ "status": "clean" | "issues", "filesChecked": number, "issueCount": number, "errors": number, "warnings": number, "infos": number, "issues": [...] }`. Each issue reports `filename`, `rule`, `severity`, `message`, and `start`/`end` positions with `line` and `column`. Lint findings—including Error-severity findings—are reports, not MCP tool-call errors.
 
-### Find and understand ABAP objects
+### 🔎 Find and understand ABAP objects
 
 | Tool | What it does |
 | --- | --- |
@@ -278,7 +338,7 @@ The single text item in the MCP result contains JSON: `{ "status": "clean" | "is
 | `GetMessages` | Read the messages defined by an ABAP message class (SE91). |
 | `GetInactiveObjects` | List objects changed by the current user but not yet activated. |
 
-### Read SAP tables and metadata
+### 🗃️ Read SAP tables and metadata
 
 | Tool | What it does |
 | --- | --- |
@@ -293,7 +353,7 @@ The single text item in the MCP result contains JSON: `{ "status": "clean" | "is
 `LIMIT`; for ordering use `ASCENDING` or `DESCENDING`, not `ASC` or `DESC`.
 SAP authorizations and the destination's available APIs still apply.
 
-### Create, update, and activate
+### ✍️ Create, update, and activate
 
 | Tool | What it does |
 | --- | --- |
@@ -311,7 +371,7 @@ package, and transport before using them. `EditSource` performs a focused
 replacement; its default syntax check prevents saving when syntax errors are
 reported.
 
-### Test and inspect the system
+### ✅ Test and inspect the system
 
 | Tool | What it does |
 | --- | --- |
@@ -322,7 +382,7 @@ reported.
 | `GetFeatures` | Probe optional system capabilities, including abapGit, RAP/OData, AMDP debugging, UI5/BSP, and CTS transports. |
 | `PrettyPrint` | Format ABAP source text without saving it to SAP. |
 
-### Inspect and create transports
+### 🚚 Inspect and create transports
 
 | Tool | What it does |
 | --- | --- |
@@ -339,7 +399,7 @@ entries set `SAP_ALLOW_TRANSPORTABLE_EDITS=true` so source edits in
 transportable packages are permitted. VSP safety checks and SAP authorizations
 still apply.
 
-### Read SAP application logs (SLG1)
+### 📜 Read SAP application logs (SLG1)
 
 | Tool | What it does |
 | --- | --- |
@@ -412,7 +472,7 @@ argument. For example, `GetSource` requires `object_type` and `name`, while
 `GrepPackages` requires `packages` and `pattern`. Inspect the live schema before
 calling an unfamiliar tool.
 
-## Inspect installed servers and tools
+## 🔍 Inspect installed servers and tools
 
 Use these checks for different layers:
 
@@ -459,7 +519,7 @@ the MCP tools. Use the MCP client tool picker or its `tools/list` inspection
 for that. `stdout` is reserved for MCP protocol messages while the server is
 running, so do not pipe the normal server command to a shell JSON formatter.
 
-## Environment variables
+## 🔧 Environment variables
 
 | Variable | Purpose |
 | --- | --- |
@@ -476,7 +536,9 @@ running, so do not pipe the normal server command to a shell JSON formatter.
 | `HTTP_PROXY` / `HTTPS_PROXY` | BAS proxy settings used for destination-list requests, destination probing, and child processes. |
 | `NO_PROXY` | Proxy bypass list for BAS destination-list requests; `.dest` hosts remain routed through the BAS proxy. |
 
-## Troubleshooting
+<a id="troubleshooting"></a>
+
+## 🩺 Troubleshooting
 
 No systems on the list? Start at BAS's front door and check the destination names:
 
@@ -491,7 +553,7 @@ Runtime diagnostics take the `stderr` lane. In the MCP server's Output view, che
 
 If automatic Go or VSP provisioning fails, check network access and the package's supported platform. You can install Go manually or set `GO_BINARY` as an explicit fallback. A trusted prebuilt VSP can be supplied with `BAS_VSP_BINARY`.
 
-## Development
+## 🧑‍💻 Development
 
 Run the built-in Node.js test suite:
 
@@ -499,9 +561,9 @@ Run the built-in Node.js test suite:
 npm test
 ```
 
-The package repository is [oisee/bas-mcp-addon](https://github.com/grknylmz/bas-mcp-addon).
+The package repository is [grknylmz/bas-mcp-addon](https://github.com/grknylmz/bas-mcp-addon).
 
-## Publishing to npm
+## 🚀 Publishing to npm
 
 The package publisher reads `NPM_PUBLISH_TOKEN` from the root `.env` file (already gitignored) or from the environment. Create `.env` with a publish-capable npm token:
 
@@ -509,9 +571,9 @@ The package publisher reads `NPM_PUBLISH_TOKEN` from the root `.env` file (alrea
 NPM_PUBLISH_TOKEN=npm_...
 ```
 
-`npm run publish:npm` publishes the version already set in `package.json`. For this release that is `0.1.17`. To publish a patch bump instead, run `npm run publish:npm -- --patch`; it updates `package.json` and `package-lock.json` before publishing. If publishing fails after the bump, retry without `--patch`. Preview the package without publishing or changing its version with `npm run publish:npm -- --dry-run`. The token is not printed or stored in the repository.
+`npm run publish:npm` publishes the version already set in `package.json`. To publish a patch bump instead, run `npm run publish:npm -- --patch`; it updates `package.json` and `package-lock.json` before publishing. If publishing fails after the bump, retry without `--patch`. Preview the package without publishing or changing its version with `npm run publish:npm -- --dry-run`. The token is not printed or stored in the repository.
 
-## Acknowledgements and licenses
+## 📄 Acknowledgements and licenses
 
 The original BAS MCP Addon code and project changes are copyright (c) 2026 Gurkan Yilmaz and released under the MIT License. Everyone may use, copy, modify, distribute, sublicense, and sell copies, provided the copyright and license notices are retained; the software is provided without warranty. See [LICENSE](LICENSE). Bundled VSP and third-party components retain their own licenses and notices in `NOTICE` and `LICENSE-APACHE-2.0.txt`.
 
