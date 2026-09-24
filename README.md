@@ -36,7 +36,7 @@ npm install --global bas-mcp-addon
 bas-vsp-mcp --setup
 ```
 
-Then in SAP Business Application Studio or VS Code:
+Then in SAP Business Application Studio:
 
 1. Open the Command Palette.
 2. Run **MCP: List Servers**.
@@ -192,7 +192,7 @@ To configure without a global install, run the guided setup directly through npm
 npx --yes --ignore-scripts --package=bas-mcp-addon bas-vsp-mcp --setup --npx
 ```
 
-This lists discovered systems in the same checkbox picker, with nothing selected by default. Use **Space** to choose destinations, **Enter** to confirm, and **a** to toggle all (select all if any are unchecked; otherwise clear the selection). It writes MCP entries that launch the selected servers through npx. The entries pin the package version used during setup, and `--ignore-scripts` avoids running the install-time wizard a second time. After setup, in BAS or VS Code run **MCP: List Servers**, select each chosen destination, and choose **Start Server**.
+This lists discovered systems in the same checkbox picker, with nothing selected by default. Use **Space** to choose destinations, **Enter** to confirm, and **a** to toggle all (select all if any are unchecked; otherwise clear the selection). It writes MCP entries that launch the selected servers through npx. The entries pin the package version used during setup, and `--ignore-scripts` avoids running the install-time wizard a second time. After setup, in BAS run **MCP: List Servers**, select each chosen destination, and choose **Start Server**.
 
 For a non-interactive installation or a platform without a published VSP asset, provide a trusted binary override:
 
@@ -200,7 +200,7 @@ For a non-interactive installation or a platform without a published VSP asset, 
 BAS_VSP_BINARY=/path/to/vsp npm install --global bas-mcp-addon
 ```
 
-Once setup is complete, the installer prints each generated MCP server name beside its destination, then shows how to connect. In BAS or VS Code:
+Once setup is complete, the installer prints each generated MCP server name beside its destination, then shows how to connect. In BAS:
 
 1. Open the Command Palette.
 2. Run **MCP: List Servers**.
@@ -211,7 +211,7 @@ Once setup is complete, the installer prints each generated MCP server name besi
 
 ## 🤖 GitHub Copilot ABAP agent and skills
 
-The package includes a user-invocable **ABAP Developer** custom agent and six task-focused Agent Skills for VS Code Copilot (custom agents and Agent Skills).
+The package includes a user-invocable **ABAP Developer** custom agent and six task-focused Agent Skills for GitHub Copilot in BAS.
 
 ### 🧠 How the agent works
 
@@ -342,16 +342,14 @@ Credentials, cookies, SAP usernames, passwords, and raw BAS destination payloads
 
 The configuration path is selected in this order:
 
-1. `BAS_VSP_MCP_CONFIG`
-2. Existing `$HOME/.vscode/data/User/mcp.json`
-3. Existing `$HOME/.vscode-server/data/User/mcp.json`
-4. Existing `$HOME/.code-server/data/User/mcp.json`
-5. `$HOME/.vscode/data/User/mcp.json` as the default
+1. `BAS_VSP_MCP_CONFIG`, when set.
+2. An existing MCP user configuration detected automatically.
+3. The default MCP user configuration location.
 
-Set `BAS_VSP_MCP_CONFIG` when the BAS deployment uses a different user-data location:
+Set `BAS_VSP_MCP_CONFIG` to use a specific configuration file:
 
 ```sh
-BAS_VSP_MCP_CONFIG="$HOME/.vscode/data/User/mcp.json" bas-vsp-mcp --setup
+BAS_VSP_MCP_CONFIG="/path/to/mcp.json" bas-vsp-mcp --setup
 ```
 
 The file must be strict JSON with an object-valued `servers` property. Existing malformed or incompatible files are rejected without overwriting them.
@@ -494,7 +492,7 @@ The proxy exposes tools through an explicit allowlist. The object deletion, debu
 
 ### 🚀 Ready to put the tools to work from chat?
 
-1. Start the generated server in BAS or VS Code with **MCP: List Servers**.
+1. Start the generated server in BAS with **MCP: List Servers**.
 2. In the Chat tools picker, enable the server for the destination you want.
 3. Ask for the operation in plain language. The MCP client sends `tools/call`; no need to type a tool such as `GetSource` into a terminal.
 4. Check the response in chat. For source edits, ask for a syntax check and tests before activation when that matches your workflow.
