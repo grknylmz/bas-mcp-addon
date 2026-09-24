@@ -35,22 +35,78 @@ export function buildMcpEntries(destinations, env = process.env) {
   const h2oUrl = env.H2O_URL;
   if (!h2oUrl) throw new Error('H2O_URL is required to write BAS MCP configuration');
   const entries = Object.create(null);
-  const selected = [...destinations].sort((a, b) => String(a.name).localeCompare(String(b.name)));
+  const selected = [...destinations].sort((a, b) => String(a.serverName || a.name).localeCompare(String(b.serverName || b.name)));
   for (const destination of selected) {
-    const name = generatedServerName(destination.name);
-    if (Object.hasOwn(entries, name)) throw new Error(`Duplicate BAS destination name: ${name}`);
+    const isCf = destination.source === 'cloud-foundry';
+    const name = generatedServerName(isCf ? destination.serverName : destination.name);
+    if (Object.hasOwn(entries, name)) throw new Error(`Duplicate MCP destination server name: ${name}`);
+    const entryEnv = {
+      H2O_URL: String(h2oUrl),
+      SAP_ALLOW_TRANSPORTABLE_EDITS: 'true'
+    };
+    if (isCf) {
+      const cf = destination.cf;
+      if (!cf) throw new Error(`Cloud Foundry destination "${destination.name}" is missing service references`);
+      Object.assign(entryEnv, {
+        BAS_VSP_DESTINATION_SOURCE: 'cloud-foundry',
+        BAS_VSP_DESTINATION: String(destination.name),
+        BAS_CF_SPACE_GUID: String(cf.spaceGuid),
+        BAS_CF_DESTINATION_INSTANCE_GUID: String(cf.destinationInstanceGuid),
+        BAS_CF_DESTINATION_INSTANCE: String(cf.destinationInstanceName),
+        BAS_CF_DESTINATION_KEY: String(cf.destinationKeyName),
+        BAS_CF_DESTINATION_NAME: String(destination.name)
+      });
+      if (destination.proxyType?.toLowerCase() === 'onpremise') {
+        Object.assign(entryEnv, {
+          BAS_CF_CONNECTIVITY_INSTANCE_GUID: String(cf.connectivityInstanceGuid),
+          BAS_CF_CONNECTIVITY_INSTANCE: String(cf.connectivityInstanceName),
+          BAS_CF_CONNECTIVITY_KEY: String(cf.connectivityKeyName)
+        });
+      }
+    } else {
+      entryEnv.BAS_VSP_DESTINATION = String(destination.name);
+    }
     entries[name] = {
       type: 'stdio',
       command: 'bas-vsp-mcp',
-      env: {
-        H2O_URL: String(h2oUrl),
-        BAS_VSP_DESTINATION: String(destination.name),
-        SAP_ALLOW_TRANSPORTABLE_EDITS: 'true'
-      },
+      env: entryEnv,
       BAS_EXT: 'true'
     };
   }
   return entries;
+}
+
+function isPackageLauncher(entry) {
+  const npxLauncher = entry?.command === 'npx'
+    && Array.isArray(entry.args)
+    && entry.args.includes('bas-vsp-mcp')
+    && entry.args.some(argument => typeof argument === 'string' && (argument === '--package=bas-mcp-addon' || /^--package=bas-mcp-addon@[^/]+$/.test(argument)));
+  return entry?.BAS_EXT === 'true' && (entry?.command === 'bas-vsp-mcp' || npxLauncher);
+}
+
+function collectCloudFoundryKeyReferences(config, managedOnly) {
+  const refs = new Map();
+  for (const entry of Object.values(config?.servers || {})) {
+    const e = entry?.env;
+    if (!e || (managedOnly && (e.BAS_VSP_DESTINATION_SOURCE !== 'cloud-foundry' || !isPackageLauncher(entry)))) continue;
+    const candidates = [
+      { kind: 'destination', spaceGuid: e.BAS_CF_SPACE_GUID, instanceGuid: e.BAS_CF_DESTINATION_INSTANCE_GUID, instanceName: e.BAS_CF_DESTINATION_INSTANCE, keyName: e.BAS_CF_DESTINATION_KEY },
+      { kind: 'connectivity', spaceGuid: e.BAS_CF_SPACE_GUID, instanceGuid: e.BAS_CF_CONNECTIVITY_INSTANCE_GUID, instanceName: e.BAS_CF_CONNECTIVITY_INSTANCE, keyName: e.BAS_CF_CONNECTIVITY_KEY }
+    ];
+    for (const ref of candidates) {
+      if (!ref.spaceGuid || !ref.instanceGuid || !ref.instanceName || !ref.keyName) continue;
+      refs.set(`${ref.kind}\\0${ref.spaceGuid}\\0${ref.instanceGuid}\\0${ref.keyName}`, ref);
+    }
+  }
+  return [...refs.values()];
+}
+
+export function collectManagedCloudFoundryKeyReferences(config) {
+  return collectCloudFoundryKeyReferences(config, true);
+}
+
+export function collectCloudFoundryKeyReferencesFromAllEntries(config) {
+  return collectCloudFoundryKeyReferences(config, false);
 }
 
 async function readConfig(path) {
@@ -107,13 +163,11 @@ export async function installMcpConfig(destinationsOrOptions, options = {}) {
   }
   const servers = Object.create(null);
   for (const [name, entry] of Object.entries(config.servers)) {
-    const npxLauncher = entry?.command === 'npx'
-      && Array.isArray(entry.args)
-      && entry.args.includes('bas-vsp-mcp')
-      && entry.args.some(argument => typeof argument === 'string' && (argument === '--package=bas-mcp-addon' || /^--package=bas-mcp-addon@[^/]+$/.test(argument)));
-    const managed = (entry?.command === 'bas-vsp-mcp' || npxLauncher)
-      && entry?.BAS_EXT === 'true'
-      && typeof entry?.env?.BAS_VSP_DESTINATION === 'string';
+    const managed = isPackageLauncher(entry)
+      && typeof entry?.env?.BAS_VSP_DESTINATION === 'string'
+      && (entry.env.BAS_VSP_DESTINATION_SOURCE === 'cloud-foundry'
+        ? typeof entry.env.BAS_CF_DESTINATION_KEY === 'string'
+        : entry.env.BAS_VSP_DESTINATION_SOURCE === undefined);
     if (!name.startsWith(LEGACY_MCP_SERVER_PREFIX) && !managed) servers[name] = entry;
   }
   for (const name of Object.keys(generated)) {

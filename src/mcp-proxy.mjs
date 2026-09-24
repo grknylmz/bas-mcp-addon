@@ -145,11 +145,30 @@ function rpcError(id, code, message, data) { return { jsonrpc: JSONRPC, id, erro
 function redactText(text) { return String(text).replace(/(authorization|cookie|password|secret|token)\s*[:=]\s*[^\s,;]+/gi, '$1=[redacted]'); }
 function diagnosticText(text) { return redactText(text || 'unknown error').replace(/\s+/g, ' ').slice(0, 500); }
 
+const closedRoutes = new WeakMap();
+
+function closeDestinationRoute(destination) {
+  if (!destination || typeof destination.close !== 'function') return Promise.resolve();
+  if (!closedRoutes.has(destination)) {
+    const closing = Promise.resolve().then(() => destination.close()).catch(() => {});
+    closedRoutes.set(destination, closing);
+  }
+  return closedRoutes.get(destination);
+}
+
+function childEnvironment(destination, env) {
+  return { ...sanitizeChildEnv(env), ...(destination.childEnv || {}) };
+}
+
+
 export function childArguments(destination, env = process.env) {
   // The proxy allowlist keeps transport mutations to CreateTransport.
   // Transportable source edits are controlled by SAP_ALLOW_TRANSPORTABLE_EDITS.
   const mode = env.BAS_VSP_MODE || 'expert';
-  return ['--url', destination.url, '--client', destination.client || '001', '--mode', mode, '--proxy-auth', '--enable-transports'];
+  const args = ['--url', destination.url, '--client', destination.client || '001', '--mode', mode];
+  if (destination.source !== 'cloud-foundry' || destination.authentication === 'PrincipalPropagation') args.push('--proxy-auth');
+  args.push('--enable-transports');
+  return args;
 }
 
 class Child {
@@ -162,7 +181,7 @@ class Child {
     this.exited = false;
     this.closing = false;
     this.process = (options.spawn || nodeSpawn)(binary, options.args || childArguments(destination, options.env), {
-      env: sanitizeChildEnv(options.env),
+      env: childEnvironment(destination, options.env),
       stdio: ['pipe', 'pipe', 'pipe']
     });
     this.process.stdout.setEncoding('utf8');
@@ -174,10 +193,12 @@ class Child {
     this.process.on('error', error => {
       if (!this.closing && !this.pending.size && this.options.log) this.options.log(`[${destination.name}] VSP child process error: ${diagnosticText(error.message)}`);
       this.fail(error);
+      void closeDestinationRoute(destination);
     });
     this.process.on('exit', (code, signal) => {
       if (!this.closing && !this.pending.size && this.options.log) this.options.log(`[${destination.name}] VSP child exited (${code ?? signal})`);
       this.fail(new Error(`child exited (${code ?? signal})`));
+      void closeDestinationRoute(destination);
     });
   }
 
@@ -251,7 +272,15 @@ class Child {
     this.closing = true;
     this.notify('notifications/cancelled', { reason: 'proxy shutdown' });
     this.process.kill('SIGTERM');
-    await Promise.race([once(this.process, 'exit'), new Promise(resolve => setTimeout(resolve, 1000))]);
+    let timeout;
+    try {
+      await Promise.race([
+        once(this.process, 'exit').catch(() => {}),
+        new Promise(resolve => { timeout = setTimeout(resolve, 1000); })
+      ]);
+    } finally {
+      clearTimeout(timeout);
+    }
     if (!this.exited) this.process.kill('SIGKILL');
   }
 }
@@ -265,6 +294,7 @@ export class MCPProxy {
     this.log = log;
     this.output = output;
     this.children = [];
+    this.started = false;
     this.namespace = new Map();
     this.initialized = false;
     this.clientInitialized = false;
@@ -274,6 +304,8 @@ export class MCPProxy {
   }
 
   start() {
+    if (this.started) return this;
+    this.started = true;
     for (const destination of this.destinations) {
       try {
         this.log(`[${destination.name}] starting VSP child (client=${destination.client || '001'})`);
@@ -291,9 +323,14 @@ export class MCPProxy {
         });
       } catch (error) {
         this.log(`[${destination.name}] failed to start child: ${diagnosticText(error.message)}`);
+        void closeDestinationRoute(destination);
       }
     }
-    if (!this.children.length) throw new Error('No BAS destination child could be started');
+    if (!this.children.length) {
+      this.started = false;
+      for (const destination of this.destinations) void closeDestinationRoute(destination);
+      throw new Error('No destination child could be started');
+    }
     return this;
   }
 
@@ -307,10 +344,12 @@ export class MCPProxy {
         healthy.push(entry);
       } catch (error) {
         this.log(`[${entry.destination.name}] initialization failed: ${diagnosticText(error.message)}`);
+        await entry.child.close();
+        await closeDestinationRoute(entry.destination);
       }
     }
     this.children = healthy;
-    if (!healthy.length) throw new Error('No BAS destination child initialized successfully');
+    if (!healthy.length) throw new Error('No destination child initialized successfully');
     this.initialized = true;
     return healthy;
   }
@@ -351,7 +390,7 @@ export class MCPProxy {
         this.log(`[${entry.destination.name}] tools/list failed: ${redactText(error.message)}`);
       }
     }
-    if (!merged.length && this.children.length) throw new Error('No BAS destination child provided tools');
+    if (!merged.length && this.children.length) throw new Error('No destination child provided tools');
     return merged;
   }
 
@@ -442,6 +481,10 @@ export class MCPProxy {
   async close() {
     if (this.shuttingDown) return;
     this.shuttingDown = true;
-    await Promise.all(this.children.map(entry => entry.child.close()));
+    await Promise.all(this.destinations.map(async destination => {
+      const entry = this.children.find(candidate => candidate.destination === destination);
+      await entry?.child.close();
+      await closeDestinationRoute(destination);
+    }));
   }
 }

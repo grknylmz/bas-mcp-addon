@@ -36,7 +36,7 @@ function runPostinstallInPty(env, keys, assetsAnswer = '\r') {
     const timeout = setTimeout(() => child.kill('SIGKILL'), 15000);
     child.stdout.on('data', chunk => {
       stdout += chunk.toString();
-      if (!selectionSent && stdout.includes('Select BAS destinations')) {
+      if (!selectionSent && stdout.includes('Select destinations')) {
         selectionSent = true;
         child.stdin.write(keys);
       }
@@ -194,10 +194,10 @@ test('global postinstall completes BAS selection before optional Copilot assets'
   assert.equal(declined.selectionSent, true, declined.stdout);
   assert.equal(declined.assetsAnswerSent, true, declined.stdout);
   const declineLogs = `${declined.stdout}\n${declined.stderr}`;
-  assert.match(declineLogs, /Configured 0 BAS MCP servers/);
+  assert.match(declineLogs, /Configured 0 MCP servers/);
   assert.match(declineLogs, /\[Y\/n\]/);
   assert.match(declineLogs, /Copilot agent and skill installation declined/);
-  assert.ok(declineLogs.indexOf('Install the ABAP Developer agent and six skills') > declineLogs.indexOf('Configured 0 BAS MCP servers'), declineLogs);
+  assert.ok(declineLogs.indexOf('Install the ABAP Developer agent and six skills') > declineLogs.indexOf('Configured 0 MCP servers'), declineLogs);
   const configAfterDecline = JSON.parse(await readFile(config, 'utf8'));
   assert.equal(Object.values(configAfterDecline.servers).filter(entry => entry.BAS_EXT === 'true').length, 0);
   await assert.rejects(stat(join(directory, '.copilot')), { code: 'ENOENT' });
@@ -207,7 +207,7 @@ test('global postinstall completes BAS selection before optional Copilot assets'
   assert.equal(accepted.selectionSent, true, accepted.stdout);
   assert.equal(accepted.assetsAnswerSent, true, accepted.stdout);
   const acceptLogs = `${accepted.stdout}\n${accepted.stderr}`;
-  assert.ok(acceptLogs.indexOf('Install the ABAP Developer agent and six skills') > acceptLogs.indexOf('Configured 1 BAS MCP server'), acceptLogs);
+  assert.ok(acceptLogs.indexOf('Install the ABAP Developer agent and six skills') > acceptLogs.indexOf('Configured 1 MCP server'), acceptLogs);
   assert.match(acceptLogs, /installed 7 Copilot agent\/skill file\(s\)/);
   const configAfterAccept = JSON.parse(await readFile(config, 'utf8'));
   assert.deepEqual(Object.values(configAfterAccept.servers)

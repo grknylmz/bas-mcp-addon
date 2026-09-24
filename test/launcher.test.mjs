@@ -30,7 +30,7 @@ function runLauncherTty(env, input, args = ['--setup']) {
     let inputSent = false;
     child.stdout.on('data', chunk => {
       stdout += chunk.toString();
-      if (!inputSent && stdout.includes('Select BAS destinations')) {
+      if (!inputSent && stdout.includes('Select destinations')) {
         inputSent = true;
         child.stdin.end(input);
       }

@@ -1,6 +1,6 @@
 import { open, readFile } from 'node:fs/promises';
 import { closeSync, openSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ensureGo } from './ensure-go.mjs';
 import { installBinary } from '../src/binary.mjs';
@@ -100,13 +100,14 @@ const STATUS_COLORS = {
 function probeCell(destination) {
   const probe = destination.probe || {};
   if (probe.status === 'skipped') return { text: 'SKIPPED (probe disabled)', color: STATUS_COLORS.yellow };
+  const error = destination.source === 'cloud-foundry' ? '' : String(probe.error || '')
+    .replace(/(authorization|cookie|password|secret|token)\s*[:=]\s*[^\s,;]+/gi, '$1=[redacted]')
+    .replace(/[\u0000-\u001f\u007f]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .slice(0, 100);
   const details = [
     probe.httpStatus ? `HTTP ${probe.httpStatus}` : '',
-    probe.error ? String(probe.error)
-      .replace(/(authorization|cookie|password|secret|token)\s*[:=]\s*[^\s,;]+/gi, '$1=[redacted]')
-      .replace(/[\u0000-\u001f\u007f]/g, ' ')
-      .replace(/\s+/g, ' ')
-      .slice(0, 100) : ''
+    error
   ].filter(Boolean).join('; ');
   if (probe.available) {
     return { text: `PASS ${probe.status || 'reachable'}${details ? ` (${details})` : ''}`, color: STATUS_COLORS.green };
@@ -114,13 +115,17 @@ function probeCell(destination) {
   return { text: `FAIL ${probe.status || 'unknown'}${details ? ` (${details})` : ''}`, color: STATUS_COLORS.red };
 }
 
-function destinationTable(destinations, registeredNames) {
-  const headings = ['BAS destination', 'Client', 'Authentication', 'ADT probe', 'MCP server'];
+export function destinationTable(destinations, registeredNames) {
+  const headings = ['Destination', 'Source', 'Client', 'Authentication', 'ADT probe', 'MCP server'];
   const rows = destinations.map(destination => {
     const probe = probeCell(destination);
-    const registered = registeredNames.has(destination.name);
+    const registered = registeredNames.has(destination.serverName || destination.name);
+    const source = destination.source === 'cloud-foundry'
+      ? `CF ${destination.cf?.destinationInstanceName || 'unknown instance'}`
+      : 'BAS';
     return [
       { text: destination.name, output: destination.name },
+      { text: source, output: source },
       { text: String(destination.client || '001'), output: String(destination.client || '001') },
       { text: String(destination.authentication || 'Unknown'), output: String(destination.authentication || 'Unknown') },
       { text: probe.text, output: `${probe.color}${probe.text}${RESET}` },
@@ -133,6 +138,7 @@ function destinationTable(destinations, registeredNames) {
   return [border, formatRow(headings.map(text => ({ text, output: text }))), border, ...rows.map(formatRow), border].join('\n');
 }
 
+
 async function announceSetup(result) {
   if (result?.reason === 'non-bas') {
     await announce('bas-mcp-addon: no BAS MCP servers configured; H2O_URL is not set. Run bas-vsp-mcp --setup in a BAS dev space.');
@@ -143,12 +149,13 @@ async function announceSetup(result) {
     return;
   }
   if (result?.reason === 'no-destinations') {
-    await announce('bas-mcp-addon: no named BAS destinations were returned by discovery. Run bas-vsp-mcp --setup to retry.');
+    const details = (result.warnings || []).map(warning => `- ${warning}`).join('\n');
+    await announce(`bas-mcp-addon: no selectable BAS or CF destinations were found. Run bas-vsp-mcp --setup to retry.${details ? `\n${details}` : ''}`);
     return;
   }
   const servers = Object.entries(result?.servers || {});
   if (!servers.length) {
-    await announce('bas-mcp-addon: no BAS MCP servers are configured.');
+    await announce('bas-mcp-addon: no MCP servers are configured.');
     return;
   }
   const selected = result.selected || [];
@@ -157,7 +164,7 @@ async function announceSetup(result) {
     `bas-mcp-addon: configured ${servers.length} MCP servers; ADT probe results are informational.`,
     destinationTable(selected, registeredNames),
     'Legend: green = ADT responded (2xx/401/403); red = probe failed; yellow = probe skipped. Only selected destinations are registered.',
-    'In BAS/VS Code run “MCP: List Servers”, select a destination, and choose Start Server.'
+    'In BAS/VS Code run “MCP: List Servers”, select the generated server name, and choose Start Server.'
   ].join('\n');
   await announce(message);
 }
@@ -202,7 +209,9 @@ async function main() {
     await announce(`bas-mcp-addon: Copilot agent and skill installation failed: ${error.message}`);
   }
 }
-main().catch(error => {
-  console.error(`bas-mcp-addon: postinstall failed: ${error.message}`);
-  process.exitCode = 1;
-});
+if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
+  main().catch(error => {
+    console.error(`bas-mcp-addon: postinstall failed: ${error.message}`);
+    process.exitCode = 1;
+  });
+}

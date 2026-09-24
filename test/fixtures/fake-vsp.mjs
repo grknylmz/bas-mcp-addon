@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { appendFileSync } from 'node:fs';
+import { request as httpRequest } from 'node:http';
 
 const args = process.argv.slice(2);
 const mode = args[args.indexOf('--mode') + 1] || 'focused';
@@ -8,6 +9,32 @@ const destination = url.replace(/^https?:\/\//, '').replace(/\.dest$/, '');
 const logPath = process.env.FAKE_LOG;
 function log(entry) { if (logPath) appendFileSync(logPath, `${JSON.stringify({ destination, ...entry })}\n`); }
 function reply(id, result) { process.stdout.write(`${JSON.stringify({ jsonrpc: '2.0', id, result })}\n`); }
+function requestADTThroughProxy(targetUrl, proxyUrl) {
+  const target = new URL(targetUrl);
+  const proxy = new URL(proxyUrl);
+  if (target.protocol !== 'http:') throw new Error('fixture ADT request supports HTTP only');
+  const headers = { host: target.host, accept: 'application/xml,text/xml,*/*' };
+  if (process.env.SAP_USER && process.env.SAP_PASSWORD) {
+    headers.authorization = `Basic ${Buffer.from(`${process.env.SAP_USER}:${process.env.SAP_PASSWORD}`).toString('base64')}`;
+  }
+  return new Promise((resolve, reject) => {
+    const request = httpRequest({
+      hostname: proxy.hostname,
+      port: Number(proxy.port),
+      method: 'GET',
+      path: target.href,
+      headers
+    }, response => {
+      let body = '';
+      response.setEncoding('utf8');
+      response.on('data', chunk => { body += chunk; });
+      response.on('end', () => resolve({ status: response.statusCode || 0, body }));
+    });
+    request.setTimeout(5_000, () => request.destroy(new Error('fixture ADT request timed out')));
+    request.on('error', reject);
+    request.end();
+  });
+}
 const toolNames = [
   'GetSource',
   'WriteSource',
@@ -159,7 +186,7 @@ function toolDefinition(name) {
 
 let buffer = '';
 process.stdin.setEncoding('utf8');
-process.stdin.on('data', chunk => {
+process.stdin.on('data', async chunk => {
   buffer += chunk;
   let end;
   while ((end = buffer.indexOf('\n')) >= 0) {
@@ -168,7 +195,7 @@ process.stdin.on('data', chunk => {
     if (!line) continue;
     const message = JSON.parse(line);
     if (message.method === 'initialize') {
-      log({ event: 'initialize', env: { guard: process.env.SAP_PROXY_CONTEXTID_GUARD, authorization: process.env.Authorization, cookie: process.env.Cookie, user: process.env.SAP_USER, password: process.env.SAP_PASSWORD, allowTransportableEdits: process.env.SAP_ALLOW_TRANSPORTABLE_EDITS } });
+      log({ event: 'initialize', argv: args, env: { guard: process.env.SAP_PROXY_CONTEXTID_GUARD, authorization: process.env.Authorization, cookie: process.env.Cookie, user: process.env.SAP_USER, password: process.env.SAP_PASSWORD, verbose: process.env.SAP_VERBOSE, httpProxy: process.env.HTTP_PROXY, httpsProxy: process.env.HTTPS_PROXY, noProxy: process.env.NO_PROXY, allowTransportableEdits: process.env.SAP_ALLOW_TRANSPORTABLE_EDITS } });
       if (destination === 'broken') process.exit(2);
       reply(message.id, { protocolVersion: '2024-11-05', capabilities: { tools: {} }, serverInfo: { name: destination, version: 'fixture' } });
     } else if (message.method === 'tools/list') {
@@ -198,6 +225,15 @@ process.stdin.on('data', chunk => {
         process.stdout.write(`${JSON.stringify({ jsonrpc: '2.0', id: message.id, error: { code: -32042, message: 'backend connection refused; password=must-not-log' } })}\n`);
       } else if (message.params?.arguments?.object === 'TOOL_ERROR') {
         reply(message.id, { content: [{ type: 'text', text: 'backend timeout; token=must-not-log' }], isError: true });
+      } else if (process.env.FAKE_CF_ADT_TEST === 'true' && name === 'GetSystemInfo') {
+        try {
+          const target = new URL('/sap/bc/adt/discovery', url);
+          const proxy = process.env.HTTP_PROXY || process.env.http_proxy;
+          const adt = await requestADTThroughProxy(target.href, proxy);
+          reply(message.id, { content: [{ type: 'text', text: adt.body }], isError: false });
+        } catch {
+          reply(message.id, { content: [{ type: 'text', text: 'fixture ADT request failed' }], isError: true });
+        }
       } else {
         reply(message.id, { content: [{ type: 'text', text: `${destination}:${name}` }], isError: false });
       }

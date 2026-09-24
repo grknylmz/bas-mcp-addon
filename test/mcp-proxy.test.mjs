@@ -4,7 +4,8 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { MCPProxy } from '../src/mcp-proxy.mjs';
+import { once } from 'node:events';
+import { childArguments, MCPProxy } from '../src/mcp-proxy.mjs';
 import { PassThrough } from 'node:stream';
 
 const fixture = fileURLToPath(new URL('./fixtures/fake-vsp.mjs', import.meta.url));
@@ -33,6 +34,65 @@ async function fixtureProxy(logger = () => {}) {
   proxy.start();
   return { directory, log, proxy };
 }
+test('uses authentication-specific arguments for Cloud Foundry children', () => {
+  const bas = { name: 'bas', url: 'http://bas.dest', client: '001' };
+  assert.deepEqual(childArguments(bas, {}), [
+    '--url', 'http://bas.dest', '--client', '001', '--mode', 'expert', '--proxy-auth', '--enable-transports'
+  ]);
+  const noAuth = { source: 'cloud-foundry', name: 'internet', url: 'http://sap.example', client: '100', authentication: 'NoAuthentication' };
+  const basic = { ...noAuth, authentication: 'BasicAuthentication' };
+  const principal = { ...noAuth, proxyType: 'OnPremise', authentication: 'PrincipalPropagation' };
+  assert.equal(childArguments(noAuth, {}).includes('--proxy-auth'), false);
+  assert.equal(childArguments(basic, {}).includes('--proxy-auth'), false);
+  assert.equal(childArguments(principal, {}).includes('--proxy-auth'), true);
+});
+
+test('closes each Cloud Foundry route after child exit and on startup failure', async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'bas-cf-child-lifecycle-'));
+  const log = join(directory, 'children.log');
+  let closeCount = 0;
+  const destination = {
+    source: 'cloud-foundry',
+    name: 'runtime',
+    url: 'http://runtime.dest',
+    client: '001',
+    authentication: 'BasicAuthentication',
+    childEnv: { SAP_USER: 'destination-user', SAP_PASSWORD: 'destination-password', SAP_VERBOSE: 'false' },
+    async close() { closeCount += 1; }
+  };
+  const proxy = new MCPProxy({
+    binary: fixture,
+    destinations: [destination],
+    env: { ...process.env, FAKE_LOG: log, SAP_USER: 'parent-user', SAP_PASSWORD: 'parent-password' },
+    log: () => {}
+  });
+  t.after(async () => { await proxy.close(); await rm(directory, { recursive: true, force: true }); });
+  proxy.start();
+  const initialized = await proxy.handle({ jsonrpc: '2.0', id: 1, method: 'initialize', params: {} });
+  assert.ok(initialized.result);
+  const child = proxy.children[0].child;
+  const exit = once(child.process, 'exit');
+  child.process.kill('SIGTERM');
+  await exit;
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(closeCount, 1);
+  const event = (await readFile(log, 'utf8')).trim().split('\n').map(line => JSON.parse(line)).find(row => row.event === 'initialize');
+  assert.equal(event.argv.includes('--proxy-auth'), false);
+  assert.deepEqual([event.env.user, event.env.password, event.env.verbose], ['destination-user', 'destination-password', 'false']);
+  await proxy.close();
+  assert.equal(closeCount, 1);
+
+  let failedStartCloseCount = 0;
+  const failedProxy = new MCPProxy({
+    binary: fixture,
+    destinations: [{ ...destination, async close() { failedStartCloseCount += 1; } }],
+    spawn: () => { throw new Error('spawn denied'); },
+    log: () => {}
+  });
+  assert.throws(() => failedProxy.start(), /No destination child could be started/);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(failedStartCloseCount, 1);
+});
 
 test('merges paged tools and routes calls to the selected child', async t => {
   const { directory, log, proxy } = await fixtureProxy();
@@ -267,6 +327,7 @@ test('stdin EOF shuts down every child process and forwards child logs', async t
   await serving;
   assert.ok(output.some(message => message.method === 'notifications/message' && message.params?.data === 'fixture log notification'));
   const entries = (await readFile(log, 'utf8')).trim().split('\n').filter(Boolean).map(line => JSON.parse(line));
+  assert.equal(entries.filter(entry => entry.event === 'initialize').length, 2);
   assert.deepEqual([...new Set(entries.filter(entry => entry.event === 'term').map(entry => entry.destination))].sort(), ['alpha', 'beta']);
 });
 

@@ -8,6 +8,7 @@ import { findBinary } from './binary.mjs';
 import { MCPProxy } from './mcp-proxy.mjs';
 import { installMcpConfig } from './mcp-config.mjs';
 import { runSetup } from './setup.mjs';
+import { resolveConfiguredCloudFoundryDestination } from './cf-destination.mjs';
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const pkg = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'));
 
@@ -53,7 +54,9 @@ async function binaryOrError() {
 }
 
 async function discoverForCommand() {
-  return discoverDestinations({ env: process.env });
+  const env = { ...process.env };
+  if (env.BAS_VSP_DESTINATION_SOURCE === 'cloud-foundry') env.BAS_VSP_DESTINATION = '';
+  return discoverDestinations({ env });
 }
 
 async function main() {
@@ -81,6 +84,24 @@ async function main() {
     else for (const row of statuses) console.error(`${row.name}: client=${row.client} authentication=${row.authentication} probe=${row.probe}`);
     if (check && !destinations.some(destination => destination.probe?.available)) {
       throw new Error('No BAS destination answered the ADT discovery probe successfully. Review the probe results above.');
+    }
+    return;
+  }
+
+  if (process.env.BAS_VSP_DESTINATION_SOURCE === 'cloud-foundry') {
+    const destination = await resolveConfiguredCloudFoundryDestination({ env: process.env });
+    let proxy;
+    try {
+      const binary = await binaryOrError();
+      proxy = new MCPProxy({ binary, destinations: [destination], env: process.env, log: message => console.error(message) });
+      const shutdown = signal => { void proxy.close().finally(() => process.exit(signal === 'SIGINT' ? 130 : 143)); };
+      process.once('SIGINT', () => shutdown('SIGINT'));
+      process.once('SIGTERM', () => shutdown('SIGTERM'));
+      await proxy.serve(process.stdin);
+    } catch (error) {
+      await proxy?.close();
+      await destination.close?.();
+      throw error;
     }
     return;
   }
