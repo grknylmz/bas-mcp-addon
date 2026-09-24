@@ -1,0 +1,283 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { MCPProxy } from '../src/mcp-proxy.mjs';
+import { PassThrough } from 'node:stream';
+
+const fixture = fileURLToPath(new URL('./fixtures/fake-vsp.mjs', import.meta.url));
+const REQUESTED_TOOLS = [
+  'AnalyzeABAPCode', 'AnalyzeCallGraph', 'CodeCompletion', 'GetAbapHelp',
+  'GetCallGraph', 'GetCalleesOf', 'GetCallersOf', 'GetCodeCoverage',
+  'GetConnectionInfo', 'GetObjectStructure', 'GetTypeHierarchy', 'GetTypeInfo',
+  'GrepObject', 'GrepPackage', 'CallRFC', 'DebuggerAttach', 'DebuggerDetach',
+  'DebuggerGetStack', 'DebuggerGetVariables', 'DebuggerListen', 'DebuggerStep',
+  'DeleteBreakpoint', 'GetBreakpoints', 'GetDump', 'GetSQLTraceState', 'GetTrace',
+  'ListDumps', 'SetBreakpoint', 'CloneObject', 'CreateAndActivateProgram',
+  'CreateClassWithTests', 'CreateObject', 'CreateTestInclude', 'DeleteObject',
+  'ExecuteABAP', 'GetClass', 'GetClassComponents', 'GetClassInclude', 'GetFunction',
+  'GetInclude', 'GetInterface', 'GetProgram', 'GetStructure', 'GetTransaction',
+  'LockObject', 'MoveObject', 'RecoverFailedCreate', 'RenameObject', 'SaveToFile',
+  'UnlockObject', 'UpdateClassInclude', 'UpdateSource', 'WriteClass', 'WriteProgram',
+  'CreateTransport', 'ListDependencies', 'PublishServiceBinding', 'UnpublishServiceBinding'
+];
+
+
+async function fixtureProxy(logger = () => {}) {
+  const directory = await mkdtemp(join(tmpdir(), 'bas-vsp-test-'));
+  const log = join(directory, 'children.log');
+  const destinations = ['alpha', 'beta'].map(name => ({ name, url: `http://${name}.dest`, client: '001' }));
+  const proxy = new MCPProxy({ binary: fixture, destinations, env: { ...process.env, BAS_VSP_MODE: 'expert', FAKE_LOG: log, SAP_ALLOW_TRANSPORTABLE_EDITS: 'true', SAP_USER: 'must-not-pass', SAP_PASSWORD: 'must-not-pass', Authorization: 'Bearer must-not-pass', Cookie: 'secret', SAP_READ_ONLY: 'true' }, log: logger });
+  proxy.start();
+  return { directory, log, proxy };
+}
+
+test('merges paged tools and routes calls to the selected child', async t => {
+  const { directory, log, proxy } = await fixtureProxy();
+  t.after(async () => { await proxy.close(); await rm(directory, { recursive: true, force: true }); });
+
+  const initialized = await proxy.handle({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2024-11-05' } });
+  assert.equal(initialized.result.serverInfo.name, 'bas-mcp-addon');
+  const listed = await proxy.handle({ jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} });
+  const names = new Set(listed.result.tools.map(tool => tool.name));
+  const queryTool = listed.result.tools.find(tool => tool.name === 'beta__RunQuery');
+  assert.deepEqual(queryTool.inputSchema, {
+    type: 'object',
+    properties: { sql_query: { type: 'string' }, max_rows: { type: 'number' }, all_rows: { type: 'boolean' } },
+    required: ['sql_query']
+  });
+  assert.equal(queryTool.description, 'RunQuery [destination: beta]');
+  const lintTool = listed.result.tools.find(tool => tool.name === 'alpha__LintABAP');
+  assert.deepEqual(Object.keys(lintTool.inputSchema.properties).sort(), ['config', 'files']);
+  assert.deepEqual(lintTool.inputSchema.required, ['files']);
+  assert.deepEqual(lintTool.inputSchema.properties.files.items.required, ['filename', 'source']);
+
+  for (const destination of ['alpha', 'beta']) {
+    for (const toolName of REQUESTED_TOOLS) {
+      assert.ok(names.has(`${destination}__${toolName}`), `${destination} exposes ${toolName}`);
+    }
+    for (const coreTool of [
+      'GetSource', 'RunQuery', 'GetSystemInfo', 'GetInstalledComponents',
+      'GetFeatures', 'GetAPIReleaseState', 'PrettyPrint', 'ListTransports',
+      'GetTransport', 'GetUserTransports', 'GetTransportInfo',
+      'GetApplicationLog', 'ActivateMultiple'
+    ]) {
+      assert.ok(names.has(`${destination}__${coreTool}`), `${destination} exposes ${coreTool}`);
+    }
+    for (const excludedTool of ['ListSQLTraces', 'ReleaseTransport', 'DeleteTransport', 'SAP']) {
+      assert.ok(!names.has(`${destination}__${excludedTool}`), `${destination} hides ${excludedTool}`);
+    }
+  }
+
+  const requiredArguments = {
+    GetFeatures: [],
+    GetAPIReleaseState: ['object_uri'],
+    PrettyPrint: ['source'],
+    ListTransports: [],
+    GetTransport: ['transport'],
+    GetUserTransports: [],
+    GetTransportInfo: ['object_url', 'dev_class'],
+    ActivateMultiple: ['objects'],
+    GetApplicationLog: []
+  };
+  for (const [toolName, required] of Object.entries(requiredArguments)) {
+    const tool = listed.result.tools.find(entry => entry.name === `alpha__${toolName}`);
+    assert.deepEqual(tool.inputSchema.required, required);
+  }
+  const applicationLog = listed.result.tools.find(entry => entry.name === 'alpha__GetApplicationLog');
+  assert.deepEqual(Object.keys(applicationLog.inputSchema.properties).sort(), [
+    'from', 'max_results', 'messages', 'object', 'program', 'subobject', 'to', 'user'
+  ]);
+
+  for (const [index, name] of ['ListSQLTraces', 'ReleaseTransport', 'DeleteTransport', 'SAP'].entries()) {
+    const hidden = await proxy.handle({
+      jsonrpc: '2.0',
+      id: 20 + index,
+      method: 'tools/call',
+      params: { name: `alpha__${name}`, arguments: {} }
+    });
+    assert.equal(hidden.error.code, -32602);
+  }
+
+
+  const read = await proxy.handle({ jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'beta__GetSource', arguments: { object: 'ZREAD' } } });
+  const write = await proxy.handle({ jsonrpc: '2.0', id: 4, method: 'tools/call', params: { name: 'alpha__WriteSource', arguments: { source: 'WRITE' } } });
+  const query = await proxy.handle({ jsonrpc: '2.0', id: 5, method: 'tools/call', params: { name: 'beta__RunQuery', arguments: { sql_query: 'SELECT * FROM T000' } } });
+  const system = await proxy.handle({ jsonrpc: '2.0', id: 6, method: 'tools/call', params: { name: 'alpha__GetSystemInfo', arguments: {} } });
+  assert.equal(read.result.content[0].text, 'beta:GetSource');
+  assert.equal(write.result.content[0].text, 'alpha:WriteSource');
+  assert.equal(query.result.content[0].text, 'beta:RunQuery');
+  assert.equal(system.result.content[0].text, 'alpha:GetSystemInfo');
+
+  const additionalCalls = [
+    ['GetFeatures', {}],
+    ['GetAPIReleaseState', { object_uri: '/sap/bc/adt/oo/classes/cl_abap_typedescr' }],
+    ['PrettyPrint', { source: 'WRITE / 1.' }],
+    ['ListTransports', {}],
+    ['GetTransport', { transport: 'A4HK900094' }],
+    ['GetUserTransports', { user_name: 'DEVUSER' }],
+    ['GetTransportInfo', { object_url: '/sap/bc/adt/oo/classes/zcl_demo', dev_class: 'ZPKG' }],
+    ['GetApplicationLog', {
+      program: 'ZDEMO_POST',
+      user: 'TESTUSER',
+      object: 'ZDEMO_LOG',
+      subobject: 'POST',
+      from: '2026-08-01',
+      to: '2026-08-31',
+      max_results: 20,
+      messages: true,
+      action: 'delete',
+      type: 'delete',
+      params: { type: 'delete' }
+    }],
+    ['ActivateMultiple', { objects: ['PROG ZDEMO'] }],
+    ['CreateTransport', {}]
+  ];
+  for (const [index, [name, arguments_]] of additionalCalls.entries()) {
+    const response = await proxy.handle({
+      jsonrpc: '2.0',
+      id: 7 + index,
+      method: 'tools/call',
+      params: { name: `alpha__${name}`, arguments: arguments_ }
+    });
+    assert.equal(response.result.content[0].text, name === 'GetApplicationLog' ? 'alpha:SAP' : `alpha:${name}`);
+  }
+
+  const entries = (await readFile(log, 'utf8')).trim().split('\n').map(line => JSON.parse(line));
+  const calls = entries.filter(entry => entry.event === 'call');
+  assert.deepEqual(calls.map(call => [call.destination, call.name]), [
+    ['beta', 'GetSource'], ['alpha', 'WriteSource'], ['beta', 'RunQuery'], ['alpha', 'GetSystemInfo'],
+    ...additionalCalls.map(([name]) => ['alpha', name === 'GetApplicationLog' ? 'SAP' : name])
+  ]);
+  assert.deepEqual(calls.map(call => call.arguments), [
+    { object: 'ZREAD' }, { source: 'WRITE' }, { sql_query: 'SELECT * FROM T000' }, {},
+    ...additionalCalls.map(([name, arguments_]) => name === 'GetApplicationLog'
+      ? {
+          action: 'analyze',
+          params: {
+            type: 'application_log',
+            program: arguments_.program,
+            user: arguments_.user,
+            object: arguments_.object,
+            subobject: arguments_.subobject,
+            from: arguments_.from,
+            to: arguments_.to,
+            max_results: arguments_.max_results,
+            messages: arguments_.messages
+          }
+        }
+      : arguments_)
+  ]);
+
+  for (const init of entries.filter(entry => entry.event === 'initialize')) {
+    assert.equal(init.env.guard, 'true');
+    assert.equal(init.env.authorization, undefined);
+    assert.equal(init.env.cookie, undefined);
+    assert.equal(init.env.user, undefined);
+    assert.equal(init.env.password, undefined);
+    assert.equal(init.env.allowTransportableEdits, 'true');
+  }
+});
+test('runs LintABAP locally and returns parser findings', async t => {
+  const { directory, log, proxy } = await fixtureProxy();
+  t.after(async () => { await proxy.close(); await rm(directory, { recursive: true, force: true }); });
+
+  await proxy.handle({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2024-11-05' } });
+  const listed = await proxy.handle({ jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} });
+  assert.ok(listed.result.tools.some(tool => tool.name === 'alpha__LintABAP'));
+  const called = await proxy.handle({
+    jsonrpc: '2.0',
+    id: 3,
+    method: 'tools/call',
+    params: {
+      name: 'alpha__LintABAP',
+      arguments: { files: [{ filename: 'zparser_error.prog.abap', source: 'blah blah.' }] }
+    }
+  });
+  assert.equal(called.result.isError, false);
+  const report = JSON.parse(called.result.content[0].text);
+  assert.equal(report.status, 'issues');
+  assert.ok(report.issues.some(issue =>
+    issue.rule === 'parser_error' &&
+    issue.filename === 'zparser_error.prog.abap' &&
+    issue.start.line === 1
+  ));
+
+  const entries = (await readFile(log, 'utf8')).trim().split('\n').filter(Boolean).map(line => JSON.parse(line));
+  assert.equal(entries.some(entry => entry.event === 'call' && entry.name === 'LintABAP'), false);
+});
+test('exposes local lint when a destination tool listing fails', async t => {
+  const { directory, proxy } = await fixtureProxy();
+  t.after(async () => { await proxy.close(); await rm(directory, { recursive: true, force: true }); });
+
+  await proxy.handle({ jsonrpc: '2.0', id: 1, method: 'initialize', params: {} });
+  const alpha = proxy.children.find(entry => entry.destination.name === 'alpha');
+  alpha.child.listTools = async () => { throw new Error('fixture tools/list failure'); };
+
+  const listed = await proxy.handle({ jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} });
+  assert.ok(listed.result.tools.some(tool => tool.name === 'alpha__LintABAP'));
+  assert.equal(listed.result.tools.some(tool => tool.name === 'alpha__GetSource'), false);
+  const called = await proxy.handle({
+    jsonrpc: '2.0',
+    id: 3,
+    method: 'tools/call',
+    params: { name: 'alpha__LintABAP', arguments: { files: [{ filename: 'zparser_error.prog.abap', source: 'blah blah.' }] } }
+  });
+  assert.equal(called.result.isError, false);
+});
+
+test('returns JSON-RPC errors for unknown namespaces and logs child failures', async t => {
+  const logs = [];
+  const { directory, proxy } = await fixtureProxy(message => logs.push(message));
+  t.after(async () => { await proxy.close(); await rm(directory, { recursive: true, force: true }); });
+  await proxy.handle({ jsonrpc: '2.0', id: 1, method: 'initialize', params: {} });
+  await proxy.handle({ jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} });
+  const unknown = await proxy.handle({ jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'missing__GetSource' } });
+  assert.equal(unknown.error.code, -32602);
+  const remoteError = await proxy.handle({ jsonrpc: '2.0', id: 4, method: 'tools/call', params: { name: 'alpha__GetSource', arguments: { object: 'RPC_ERROR' } } });
+  assert.equal(remoteError.error.code, -32042);
+  assert.ok(logs.some(message => message.includes('backend connection refused') && message.includes('password=[redacted]') && !message.includes('must-not-log')));
+  const toolError = await proxy.handle({ jsonrpc: '2.0', id: 5, method: 'tools/call', params: { name: 'beta__GetSource', arguments: { object: 'TOOL_ERROR' } } });
+  assert.equal(toolError.result.isError, true);
+  assert.ok(logs.some(message => message.includes('backend timeout') && message.includes('token=[redacted]') && !message.includes('must-not-log')));
+  const success = await proxy.handle({ jsonrpc: '2.0', id: 6, method: 'tools/call', params: { name: 'alpha__WriteSource', arguments: { source: 'must-not-log' } } });
+  assert.equal(success.result.content[0].text, 'alpha:WriteSource');
+  assert.ok(logs.some(message => /\[alpha\] tools\/call WriteSource completed in \d+ms/.test(message)));
+  assert.equal(logs.some(message => message.includes('must-not-log')), false);
+  const child = proxy.children.find(entry => entry.destination.name === 'alpha').child;
+  child.process.kill('SIGKILL');
+  await new Promise(resolve => setTimeout(resolve, 25));
+  const failed = await proxy.handle({ jsonrpc: '2.0', id: 7, method: 'tools/call', params: { name: 'alpha__GetSource' } });
+  assert.equal(failed.error.code, -32001);
+  assert.ok(logs.some(message => message.includes('alpha') && message.includes('tools/call GetSource failed')));
+});
+test('stdin EOF shuts down every child process and forwards child logs', async t => {
+  const { directory, log, proxy } = await fixtureProxy();
+  t.after(async () => { await rm(directory, { recursive: true, force: true }); });
+  const input = new PassThrough();
+  const output = [];
+  const serving = proxy.serve(input, line => output.push(JSON.parse(line)));
+  input.end([
+    { jsonrpc: '2.0', id: 1, method: 'initialize', params: {} },
+    { jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} },
+    { jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'alpha__GetSource', arguments: { emitNotification: true } } }
+  ].map(message => JSON.stringify(message)).join('\n') + '\n');
+  await serving;
+  assert.ok(output.some(message => message.method === 'notifications/message' && message.params?.data === 'fixture log notification'));
+  const entries = (await readFile(log, 'utf8')).trim().split('\n').filter(Boolean).map(line => JSON.parse(line));
+  assert.deepEqual([...new Set(entries.filter(entry => entry.event === 'term').map(entry => entry.destination))].sort(), ['alpha', 'beta']);
+});
+
+
+test('keeps healthy children when one destination fails initialization', async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'bas-vsp-test-'));
+  const log = join(directory, 'children.log');
+  const proxy = new MCPProxy({ binary: fixture, destinations: ['broken', 'healthy'].map(name => ({ name, url: `http://${name}.dest`, client: '001' })), env: { ...process.env, FAKE_LOG: log }, log: () => {} });
+  proxy.start();
+  t.after(async () => { await proxy.close(); await rm(directory, { recursive: true, force: true }); });
+  await proxy.handle({ jsonrpc: '2.0', id: 1, method: 'initialize', params: {} });
+  const listed = await proxy.handle({ jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} });
+  assert.ok(listed.result.tools.every(tool => tool.name.startsWith('healthy__')));
+});

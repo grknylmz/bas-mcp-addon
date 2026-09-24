@@ -1,0 +1,310 @@
+diff --git a/cmd/vsp/main.go b/cmd/vsp/main.go
+--- a/cmd/vsp/main.go
++++ b/cmd/vsp/main.go
+@@ -102,1 +102,2 @@
+ 	// Authentication flags
++	rootCmd.Flags().BoolVar(&cfg.ProxyAuth, "proxy-auth", false, "Use BAS destination proxy authentication; do not send local credentials")
+@@ -172,1 +172,2 @@
+ 	// Bind flags to viper for environment variable support
++	viper.BindPFlag("proxy-auth", rootCmd.Flags().Lookup("proxy-auth"))
+@@ -235,1 +235,4 @@
+ 	// Browser-based SSO authentication (must run before processCookieAuth)
++	if err := validateProxyAuth(cmd); err != nil {
++		return err
++	}
+@@ -348,1 +348,2 @@
+ func resolveConfig(cmd *cobra.Command) {
++	cfg.ProxyAuth = cfg.ProxyAuth || viper.GetBool("PROXY_AUTH")
+@@ -533,1 +533,19 @@
++func validateProxyAuth(cmd *cobra.Command) error {
++	if !cfg.ProxyAuth {
++		return nil
++	}
++	for _, flag := range []string{"user", "password", "pass", "cookie-file", "cookie-string", "browser-auth", "sso", "saml-auth", "saml-user", "saml-password", "credential-cmd"} {
++		if cmd.Flags().Changed(flag) {
++			return fmt.Errorf("--proxy-auth cannot be combined with local authentication option --%s", flag)
++		}
++	}
++	for _, key := range []string{"USER", "USERNAME", "PASSWORD", "PASS", "COOKIE_FILE", "COOKIE_STRING", "BROWSER_AUTH", "SSO", "SAML_AUTH", "SAML_USER", "SAML_PASSWORD", "CREDENTIAL_CMD"} {
++		if os.Getenv("SAP_"+key) != "" {
++			return fmt.Errorf("--proxy-auth cannot be combined with SAP_%s; BAS supplies destination authentication", key)
++		}
++	}
++	cfg.Username, cfg.Password = "", ""
++	cfg.Cookies = nil
++	return nil
++}
+ func processBrowserAuth(cmd *cobra.Command) error {
+@@ -601,1 +601,4 @@
+ func processSSOAuth(cmd *cobra.Command) error {
++	if cfg.ProxyAuth {
++		return nil
++	}
+@@ -659,1 +659,4 @@
+ func processSAMLAuth(cmd *cobra.Command) error {
++	if cfg.ProxyAuth {
++		return nil
++	}
+@@ -754,1 +754,4 @@
+ func processCookieAuth(cmd *cobra.Command) error {
++	if cfg.ProxyAuth {
++		return nil
++	}
+diff --git a/internal/mcp/server.go b/internal/mcp/server.go
+--- a/internal/mcp/server.go
++++ b/internal/mcp/server.go
+@@ -71,2 +71,5 @@
+ 	// Cookie authentication (alternative to basic auth)
++	// ProxyAuth delegates identity to a BAS destination proxy. Local credentials are rejected.
++	ProxyAuth bool
++
+ 	Cookies map[string]string
+@@ -154,1 +154,4 @@
++	if cfg.ProxyAuth {
++		opts = append(opts, adt.WithProxyContextIDGuard())
++	}
+ 	if len(cfg.Cookies) > 0 {
+diff --git a/pkg/adt/client.go b/pkg/adt/client.go
+--- a/pkg/adt/client.go
++++ b/pkg/adt/client.go
+@@ -1586 +1586 @@
+-		Accept: "application/xml",
++		Accept: "application/atom+xml;type=feed",
+@@ -1592,27 +1592,27 @@
+-	type componentXML struct {
+-		Name        string `xml:"name,attr"`
+-		Release     string `xml:"release,attr"`
+-		SupportPack string `xml:"supportPack,attr"`
+-		Description string `xml:"description,attr"`
+-	}
+-	type componentsXML struct {
+-		XMLName    xml.Name       `xml:"components"`
+-		Components []componentXML `xml:"component"`
+-	}
+-
+-	var comps componentsXML
+-	if err := xml.Unmarshal(resp.Body, &comps); err != nil {
+-		return nil, fmt.Errorf("parsing components: %w", err)
+-	}
+-
+-	result := make([]InstalledComponent, len(comps.Components))
+-	for i, c := range comps.Components {
+-		result[i] = InstalledComponent{
+-			Name:        c.Name,
+-			Release:     c.Release,
+-			SupportPack: c.SupportPack,
+-			Description: c.Description,
+-		}
+-	}
+-
+-	return result, nil
++	type componentEntry struct {
++		ID    string `xml:"id"`
++		Title string `xml:"title"`
++	}
++	type componentsFeed struct {
++		Entries []componentEntry `xml:"entry"`
++	}
++	var feed componentsFeed
++	if err := xml.Unmarshal(resp.Body, &feed); err != nil {
++		return nil, fmt.Errorf("parsing components: %w", err)
++	}
++
++	result := make([]InstalledComponent, 0, len(feed.Entries))
++	for i, entry := range feed.Entries {
++		fields := strings.SplitN(entry.Title, ";", 4)
++		name := strings.TrimSpace(entry.ID)
++		if name == "" || len(fields) != 4 {
++			return nil, fmt.Errorf("parsing components: malformed feed entry %d", i+1)
++		}
++		result = append(result, InstalledComponent{
++			Name:        name,
++			Release:     strings.TrimSpace(fields[0]),
++			SupportPack: strings.TrimSpace(fields[2]),
++			Description: strings.TrimSpace(fields[3]),
++		})
++	}
++	return result, nil
+diff --git a/pkg/adt/client_components_test.go b/pkg/adt/client_components_test.go
+new file mode 100644
+--- /dev/null
++++ b/pkg/adt/client_components_test.go
+@@ -0,0 +1,40 @@
++package adt
++
++import (
++	"context"
++	"io"
++	"net/http"
++	"net/http/httptest"
++	"testing"
++)
++
++func TestGetInstalledComponentsUsesADTFeed(t *testing.T) {
++	const accept = "application/atom+xml;type=feed"
++	const response = `<atom:feed xmlns:atom="http://www.w3.org/2005/Atom"><atom:entry><atom:id>SAP_BASIS</atom:id><atom:title>758;SAPK-75802INSAPBASIS;0002;SAP Basis &gt; 2022; patch</atom:title></atom:entry></atom:feed>`
++	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
++		if r.URL.Path != "/sap/bc/adt/system/components" {
++			t.Errorf("unexpected request path: %s", r.URL.Path)
++			w.WriteHeader(http.StatusNotFound)
++			return
++		}
++		if got := r.Header.Get("Accept"); got != accept {
++			t.Errorf("Accept = %q, want %q", got, accept)
++			w.WriteHeader(http.StatusNotAcceptable)
++			return
++		}
++		w.Header().Set("Content-Type", accept)
++		_, _ = io.WriteString(w, response)
++	}))
++	defer server.Close()
++
++	components, err := NewClient(server.URL, "user", "pass").GetInstalledComponents(context.Background())
++	if err != nil {
++		t.Fatalf("GetInstalledComponents returned an error: %v", err)
++	}
++	if len(components) != 1 {
++		t.Fatalf("got %d components, want 1", len(components))
++	}
++	if got := components[0]; got.Name != "SAP_BASIS" || got.Release != "758" || got.SupportPack != "0002" || got.Description != "SAP Basis > 2022; patch" {
++		t.Errorf("got component %#v", got)
++	}
++}
+diff --git a/internal/mcp/server_test.go b/internal/mcp/server_test.go
+--- a/internal/mcp/server_test.go
++++ b/internal/mcp/server_test.go
+@@ -159,3 +159,112 @@ func TestDebuggerGetVariablesSchemaIncludesItems(t *testing.T) {
+ 		t.Fatalf("expected variableIDs.items.type to be 'string', got %v", items["type"])
+ 	}
+ }
++
++func TestActivateMultipleObjectsSchemaIncludesItems(t *testing.T) {
++	cfg := &Config{
++		BaseURL:  "https://sap.example.com:44300",
++		Username: "testuser",
++		Password: "testpass",
++		Client:   "001",
++		Language: "EN",
++		Mode:     "expert",
++	}
++
++	server := NewServer(cfg)
++	if server == nil || server.mcpServer == nil {
++		t.Fatal("server or MCP server is nil")
++	}
++
++	rawResponse := server.mcpServer.HandleMessage(context.Background(), []byte(`{
++		"jsonrpc": "2.0",
++		"id": 1,
++		"method": "tools/list",
++		"params": {}
++	}`))
++	response, ok := rawResponse.(mcp.JSONRPCResponse)
++	if !ok {
++		t.Fatalf("expected JSONRPCResponse, got %T", rawResponse)
++	}
++
++	var tools []mcp.Tool
++	switch result := response.Result.(type) {
++	case mcp.ListToolsResult:
++		tools = result.Tools
++	case *mcp.ListToolsResult:
++		tools = result.Tools
++	default:
++		t.Fatalf("expected ListToolsResult, got %T", response.Result)
++	}
++
++	var activateMultipleTool *mcp.Tool
++	for i := range tools {
++		if tools[i].Name == "ActivateMultiple" {
++			activateMultipleTool = &tools[i]
++			break
++		}
++	}
++	if activateMultipleTool == nil {
++		t.Fatal("ActivateMultiple tool not found")
++	}
++
++	objectsRaw, ok := activateMultipleTool.InputSchema.Properties["objects"]
++	if !ok {
++		t.Fatal("objects property not found in ActivateMultiple schema")
++	}
++	objects, ok := objectsRaw.(map[string]interface{})
++	if !ok {
++		t.Fatalf("expected objects schema to be map[string]interface{}, got %T", objectsRaw)
++	}
++	if objects["type"] != "array" {
++		t.Fatalf("expected objects type to be 'array', got %v", objects["type"])
++	}
++
++	itemsRaw, ok := objects["items"]
++	if !ok {
++		t.Fatal("objects array schema is missing items")
++	}
++	items, ok := itemsRaw.(map[string]interface{})
++	if !ok {
++		t.Fatalf("expected objects.items to be map[string]interface{}, got %T", itemsRaw)
++	}
++	anyOf, ok := items["anyOf"].([]interface{})
++	if !ok || len(anyOf) != 2 {
++		t.Fatalf("expected objects.items.anyOf to contain string and object variants, got %v", items["anyOf"])
++	}
++	hasObject, hasString := false, false
++	for _, variant := range anyOf {
++		schema, ok := variant.(map[string]interface{})
++		if !ok {
++			t.Fatalf("expected item variant to be a schema object, got %T", variant)
++		}
++		switch schema["type"] {
++		case "object":
++			hasObject = true
++			properties, ok := schema["properties"].(map[string]interface{})
++			if !ok {
++				t.Fatal("object item schema is missing properties")
++			}
++			for _, propertyName := range []string{"url", "name"} {
++				propertyRaw, ok := properties[propertyName]
++				if !ok {
++					t.Fatalf("object item schema is missing %q", propertyName)
++				}
++				property, ok := propertyRaw.(map[string]interface{})
++				if !ok || property["type"] != "string" {
++					t.Fatalf("object item %q must have type string", propertyName)
++				}
++			}
++			required, ok := schema["required"].([]string)
++			if !ok || len(required) != 2 || required[0] != "url" || required[1] != "name" {
++				t.Fatalf("object item schema must require url and name, got %v", schema["required"])
++			}
++		case "string":
++			hasString = true
++		default:
++			t.Fatalf("unexpected ActivateMultiple item type %v", schema["type"])
++		}
++	}
++	if !hasObject || !hasString {
++		t.Fatalf("expected object and string item variants, got object=%t string=%t", hasObject, hasString)
++	}
++}
+diff --git a/internal/mcp/tools_register.go b/internal/mcp/tools_register.go
+--- a/internal/mcp/tools_register.go
++++ b/internal/mcp/tools_register.go
+@@ -837,6 +837,19 @@ func (s *Server) registerDevTools(shouldRegister func(string) bool) {
+ 				mcp.Description(`Objects to activate. Each item can be:
+   - {"url": "/sap/bc/adt/programs/programs/zprog", "name": "ZPROG"}
+   - "TYPE NAME" shorthand, e.g. "PROG ZPROG", "INCL ZPROG_TOP", "CLAS ZCL_X"`),
++				mcp.Items(map[string]any{
++					"anyOf": []any{
++						map[string]any{
++							"type": "object",
++							"properties": map[string]any{
++								"url":  map[string]any{"type": "string"},
++								"name": map[string]any{"type": "string"},
++							},
++							"required": []string{"url", "name"},
++						},
++						map[string]any{"type": "string"},
++					},
++				}),
+ 			),
+ 		), s.handleActivateMultiple)

@@ -1,0 +1,26 @@
+name: release
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: write
+jobs:
+  build-vsp:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.27.1'
+      - name: Require package repository metadata
+        run: node -e "const p=require('./package.json'); if (!p.repository?.url) throw new Error('package.json repository.url is required')"
+      - run: npm run build:vsp
+      - name: Publish patched VSP assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*
+            LICENSE
+            NOTICE
+            LICENSE-APACHE-2.0.txt
+          fail_on_unmatched_files: true

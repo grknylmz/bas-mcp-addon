@@ -1,0 +1,50 @@
+{
+  "name": "bas-mcp-addon",
+  "version": "0.1.21",
+  "description": "SAP Business Application Studio MCP entry point for vibing-steampunk ADT tools",
+  "author": "Gurkan Yilmaz",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@abaplint/core": "2.119.0",
+    "@inquirer/checkbox": "4.2.0",
+    "undici": "^6.21.3"
+  },
+  "bin": {
+    "bas-vsp-mcp": "src/launcher.mjs"
+  },
+  "scripts": {
+    "postinstall": "node scripts/postinstall.mjs",
+    "test": "node --test test/*.test.mjs",
+    "publish:npm": "node scripts/publish-npm.mjs",
+    "ensure:go": "node scripts/ensure-go.mjs",
+    "build:vsp": "node scripts/build-vsp.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/grknylmz/bas-mcp-addon.git"
+  },
+  "homepage": "https://github.com/grknylmz/bas-mcp-addon#readme",
+  "bugs": {
+    "url": "https://github.com/grknylmz/bas-mcp-addon/issues"
+  },
+  "license": "MIT",
+  "files": [
+    "src/",
+    "scripts/",
+    "patches/",
+    "dist/",
+    "test/",
+    "LICENSE",
+    "NOTICE",
+    "LICENSE-APACHE-2.0.txt",
+    "tools.md",
+    ".github/agents/",
+    ".github/skills/"
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
+}
