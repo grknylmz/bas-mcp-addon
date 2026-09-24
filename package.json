@@ -1,6 +1,6 @@
 {
   "name": "bas-mcp-addon",
-  "version": "0.1.26",
+  "version": "0.1.27",
   "description": "SAP Business Application Studio MCP entry point for vibing-steampunk ADT tools",
   "author": "Gurkan Yilmaz",
   "type": "module",
