@@ -138,33 +138,70 @@ export function destinationTable(destinations, registeredNames) {
 }
 async function announceSetup(result) {
   if (result?.reason === 'non-bas') {
-    await announce('BAS destination setup was skipped because H2O_URL is not set.\nRun bas-vsp-mcp --setup from a BAS dev space when you are ready.', 'info');
+    await announce('BAS destination setup was skipped because H2O_URL is not set.\nMCP config was not changed.\nRun bas-vsp-mcp --setup from a BAS dev space when you are ready.', 'info');
     return;
   }
   if (result?.reason === 'non-tty') {
-    await announce('Destination selection was skipped because npm did not provide an interactive terminal.\nRun bas-vsp-mcp --setup from an interactive BAS terminal, or use the documented npx setup command.', 'warning');
+    await announce('Destination selection was skipped because npm did not provide an interactive terminal.\nMCP config was not changed.\nRun bas-vsp-mcp --setup from an interactive BAS terminal, or run npx --yes --ignore-scripts --package=bas-mcp-addon bas-vsp-mcp --setup --npx.', 'warning');
     return;
   }
   if (result?.reason === 'no-destinations') {
     const details = (result.warnings || []).map(warning => `• ${warning}`).join('\n');
-    await announce(`No selectable BAS or Cloud Foundry destinations were found.\nRun bas-vsp-mcp --setup to retry.${details ? `\n${details}` : ''}`, 'warning');
+    await announce(`No selectable BAS or Cloud Foundry destinations were found; MCP config was not changed.\nRun bas-vsp-mcp --setup to retry.${details ? `\n${details}` : ''}`, 'warning');
     return;
   }
+
   const servers = Object.entries(result?.servers || {});
+  const path = result?.path || '(path unavailable)';
   if (!servers.length) {
-    await announce('No MCP servers were added because no destinations were selected.\nRun bas-vsp-mcp --setup to choose destinations later.', 'info');
+    await announce([
+      'No MCP server entries are configured for this add-on.',
+      `MCP config file: ${path}`,
+      'No destinations were selected, so previously managed entries were removed. Other servers and settings were preserved.',
+      'Run bas-vsp-mcp --setup to choose destinations later.'
+    ].join('\n'), 'info');
     return;
   }
+
   const selected = result.selected || [];
+  const destinationsByServer = new Map(selected.map(destination => [
+    destination.serverName || destination.name,
+    destination
+  ]));
   const registeredNames = new Set(servers.map(([name]) => name));
+  const entryDetails = servers.flatMap(([name, entry]) => {
+    const destination = destinationsByServer.get(name);
+    const source = entry.env?.BAS_VSP_DESTINATION_SOURCE === 'cloud-foundry' || destination?.source === 'cloud-foundry'
+      ? 'Cloud Foundry'
+      : 'BAS';
+    const destinationName = entry.env?.BAS_VSP_DESTINATION || destination?.name || 'unknown';
+    const client = destination?.client || '001';
+    const authentication = destination?.authentication || 'unknown';
+    const args = Array.isArray(entry.args) ? entry.args : [];
+    const command = [entry.command, ...args].filter(value => typeof value === 'string' && value.length > 0).join(' ');
+    const environmentKeys = Object.keys(entry.env || {}).sort().join(', ');
+    return [
+      `• ${colorText(name, 'cyan', true)}`,
+      `  Destination: ${source} · ${destinationName} · client ${client} · ${authentication}`,
+      `  Launch: ${entry.type || 'stdio'} · ${command || '(command unavailable)'}`,
+      `  Environment keys: ${environmentKeys || '(none)'}`
+    ];
+  });
   const message = [
-    `Destination status report for ${servers.length} configured MCP server${servers.length === 1 ? '' : 's'}`,
+    'Installation configuration summary',
+    `MCP config file: ${path}`,
+    `Configured MCP entries (${servers.length}):`,
+    ...entryDetails,
+    '',
     destinationTable(selected, registeredNames),
     `Probe guide: ${colorText('PASS', 'green', true)} = ADT responded (2xx/401/403) · ${colorText('FAIL', 'red', true)} = probe failed · ${colorText('SKIPPED', 'yellow', true)} = probe disabled.`,
-    'ADT probes are informational; only the destinations you selected are registered.'
+    'Probe results are informational; only selected destinations are registered.',
+    'Unrelated MCP servers and settings were preserved. Authentication remains in BAS/Cloud Foundry; credentials were not copied into the MCP file.',
+    'Inspect: BAS/VS Code → “MCP: Open User Configuration”. Start: “MCP: List Servers” → select a generated server → “Start Server”.'
   ].join('\n');
   await announce(message, 'success');
 }
+
 async function main() {
   if (process.env.npm_config_ignore_scripts === 'true') return;
 
@@ -194,9 +231,11 @@ async function main() {
     return;
   }
 
+  let setupResult;
+  let setupCompleted = false;
   try {
-    const result = await runInstallSetup();
-    await announceSetup(result);
+    setupResult = await runInstallSetup();
+    setupCompleted = true;
   } catch (error) {
     await announce(`BAS MCP setup failed: ${error.message}`, 'error');
     await announce('Rerun bas-vsp-mcp --setup.', 'info');
@@ -207,6 +246,7 @@ async function main() {
   } catch (error) {
     await announce(`Copilot agent and skill installation failed: ${error.message}`, 'error');
   }
+  if (setupCompleted) await announceSetup(setupResult);
 }
 if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
   main().catch(error => {

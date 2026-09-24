@@ -205,6 +205,8 @@ test('global postinstall completes BAS selection before optional Copilot assets'
   assert.match(declineLogs, /Copilot agent and skills were skipped\. Your files were not changed/);
   assert.ok(declineLogs.indexOf('Optional Copilot setup is waiting for your choice') > declineLogs.indexOf('Configured 0 MCP servers'), declineLogs);
   assert.ok(declineLogs.indexOf('Install the ABAP Developer agent and six skills') > declineLogs.indexOf('Optional Copilot setup is waiting for your choice'), declineLogs);
+  assert.ok(declineLogs.indexOf('No MCP server entries are configured for this add-on.') > declineLogs.indexOf('Copilot agent and skills were skipped'), declineLogs);
+  assert.ok(declineLogs.includes(`MCP config file: ${config}`), declineLogs);
   const configAfterDecline = JSON.parse(await readFile(config, 'utf8'));
   assert.equal(Object.values(configAfterDecline.servers).filter(entry => entry.BAS_EXT === 'true').length, 0);
   await assert.rejects(stat(join(directory, '.copilot')), { code: 'ENOENT' });
@@ -216,6 +218,11 @@ test('global postinstall completes BAS selection before optional Copilot assets'
   const acceptLogs = `${accepted.stdout}\n${accepted.stderr}`;
   assert.ok(acceptLogs.indexOf('Install the ABAP Developer agent and six skills') > acceptLogs.indexOf('Configured 1 MCP server'), acceptLogs);
   assert.match(acceptLogs, /Installed 7 Copilot files/);
+  assert.ok(acceptLogs.indexOf('Installation configuration summary') > acceptLogs.indexOf('Installed 7 Copilot files'), acceptLogs);
+  assert.ok(acceptLogs.includes(`MCP config file: ${config}`), acceptLogs);
+  assert.ok(acceptLogs.includes('Destination: BAS · alpha-system · client 100 · Basic'), acceptLogs);
+  assert.ok(acceptLogs.includes('Launch: stdio · bas-vsp-mcp'), acceptLogs);
+  assert.ok(acceptLogs.includes('Environment keys: BAS_VSP_DESTINATION, H2O_URL, SAP_ALLOW_TRANSPORTABLE_EDITS'), acceptLogs);
   const configAfterAccept = JSON.parse(await readFile(config, 'utf8'));
   assert.deepEqual(Object.values(configAfterAccept.servers)
     .filter(entry => entry.BAS_EXT === 'true')

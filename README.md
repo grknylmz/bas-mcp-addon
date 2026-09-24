@@ -200,7 +200,7 @@ For a non-interactive installation or a platform without a published VSP asset, 
 BAS_VSP_BINARY=/path/to/vsp npm install --global bas-mcp-addon
 ```
 
-Once setup is complete, the installer prints each generated MCP server name beside its destination, then shows how to connect. In BAS:
+At the end of a global install, the color-coded summary shows the MCP config path, each generated entry name, destination/client/authentication, launch command, and environment key names (not values). The installer does not open an editor automatically; in BAS/VS Code:
 
 1. Open the Command Palette.
 2. Run **MCP: List Servers**.
