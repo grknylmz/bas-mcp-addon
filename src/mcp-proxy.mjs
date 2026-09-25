@@ -5,106 +5,6 @@ import { ABAP_LINT_TOOL, runABAPLint } from './abaplint.mjs';
 
 const JSONRPC = '2.0';
 const FORWARDED_METHODS = new Set(['ping', 'resources/list', 'resources/read', 'resources/templates/list', 'prompts/list', 'completion/complete', 'logging/setLevel']);
-// Keep the BAS-facing VSP surface explicit. The child may register more tools,
-// but only this set is advertised and callable through the proxy.
-const CORE_VSP_TOOL_NAMES = new Set([
-  'GetSource',
-  'WriteSource',
-  'EditSource',
-  'SearchObject',
-  'GrepObjects',
-  'GrepPackages',
-  'FindDefinition',
-  'FindReferences',
-  'GetContext',
-  'SyntaxCheck',
-  'Activate',
-  'ActivateMultiple',
-  'ActivatePackage',
-  'CompareSource',
-  'GetClassInfo',
-  'CreatePackage',
-  'CreateTable',
-  'GetTable',
-  'GetTableContents',
-  'GetTransport',
-  'GetTransportInfo',
-  'GetUserTransports',
-  'ListTransports',
-  'RunQuery',
-  'GetPackage',
-  'GetFunctionGroup',
-  'GetCDSDependencies',
-  'GetCDSImpactAnalysis',
-  'GetCDSElementInfo',
-  'GetAPIReleaseState',
-  'GetMessages',
-  'GetFeatures',
-  'PrettyPrint',
-  'GetSystemInfo',
-  'GetInstalledComponents',
-  'RunUnitTests',
-  'RunATCCheck',
-  'GetInactiveObjects',
-  'AnalyzeABAPCode',
-  'AnalyzeCallGraph',
-  'CodeCompletion',
-  'GetAbapHelp',
-  'GetCallGraph',
-  'GetCalleesOf',
-  'GetCallersOf',
-  'GetCodeCoverage',
-  'GetConnectionInfo',
-  'GetObjectStructure',
-  'GetTypeHierarchy',
-  'GetTypeInfo',
-  'GrepObject',
-  'GrepPackage',
-  'CallRFC',
-  'DebuggerAttach',
-  'DebuggerDetach',
-  'DebuggerGetStack',
-  'DebuggerGetVariables',
-  'DebuggerListen',
-  'DebuggerStep',
-  'DeleteBreakpoint',
-  'GetBreakpoints',
-  'GetDump',
-  'GetSQLTraceState',
-  'GetTrace',
-  'ListDumps',
-  'SetBreakpoint',
-  'CloneObject',
-  'CreateAndActivateProgram',
-  'CreateClassWithTests',
-  'CreateObject',
-  'CreateTestInclude',
-  'DeleteObject',
-  'ExecuteABAP',
-  'GetClass',
-  'GetClassComponents',
-  'GetClassInclude',
-  'GetFunction',
-  'GetInclude',
-  'GetInterface',
-  'GetProgram',
-  'GetStructure',
-  'GetTransaction',
-  'LockObject',
-  'MoveObject',
-  'RecoverFailedCreate',
-  'RenameObject',
-  'SaveToFile',
-  'UnlockObject',
-  'UpdateClassInclude',
-  'UpdateSource',
-  'WriteClass',
-  'WriteProgram',
-  'CreateTransport',
-  'ListDependencies',
-  'PublishServiceBinding',
-  'UnpublishServiceBinding'
-]);
 const APPLICATION_LOG_PARAMETERS = [
   'program',
   'user',
@@ -366,21 +266,19 @@ export class MCPProxy {
       try {
         for (const tool of await entry.child.listTools()) {
           if (tool.name === 'SAP') {
-            const name = `${slug}__GetApplicationLog`;
-            this.namespace.set(name, {
+            const applicationLogName = `${slug}__GetApplicationLog`;
+            this.namespace.set(applicationLogName, {
               entry,
               upstream: 'SAP',
               publicName: 'GetApplicationLog',
               transformArguments: applicationLogArguments
             });
             merged.push({
-              name,
+              name: applicationLogName,
               description: `${APPLICATION_LOG_DESCRIPTION} [destination: ${entry.destination.name}]`,
               inputSchema: APPLICATION_LOG_SCHEMA
             });
-            continue;
           }
-          if (!CORE_VSP_TOOL_NAMES.has(tool.name)) continue;
 
           const name = `${slug}__${tool.name}`;
           this.namespace.set(name, { entry, upstream: tool.name });

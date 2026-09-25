@@ -155,7 +155,7 @@ Once the destination server is enabled in Copilot Chat, ask for outcomes instead
 | 🚦 **Explicit state change** | Activation, service publication, and transport creation happen only when requested and authorized. |
 | 🧪 **Verification first** | The agent uses available lint, syntax, unit-test, ATC, and diagnostics workflows and reports what actually ran. |
 | 🔒 **SAP authorization remains authoritative** | The add-on does not bypass backend SAP permissions. |
-| 🚫 **No transport release or deletion** | `ReleaseTransport` and `DeleteTransport` remain filtered out. |
+| 🚚 **Full VSP tool surface** | The proxy exposes every tool registered by the active VSP child, including transport tools; SAP authorizations and VSP safety checks still apply. |
 | 🧱 **Per-destination isolation** | Generated MCP entries are scoped to a single `BAS_VSP_DESTINATION`. |
 | 🔑 **No credentials in `mcp.json`** | Authentication material stays in BAS destination configuration rather than MCP config. |
 
@@ -366,7 +366,7 @@ The file must be strict JSON with an object-valued `servers` property. Existing 
 
 With `H2O_URL` set, the normal command starts the MCP proxy. Each generated entry supplies one `BAS_VSP_DESTINATION`, so each server stays in its own lane and exposes only its selected SAP system.
 
-The proxy exposes its curated baseline plus the VSP tools listed in `tools.md` when the installed VSP mode registers them. It enables `CreateTransport` and transportable source edits in generated MCP entries; transport release and deletion remain unavailable. Direct VSP invocation remains unchanged.
+The proxy exposes every VSP tool registered by the installed VSP mode, plus local `LintABAP` and the convenience `GetApplicationLog` mapping. It enables transport support and transportable source edits in generated MCP entries. Direct VSP invocation remains unchanged.
 
 Without `H2O_URL`, the command passes arguments directly to the installed VSP binary—no BAS proxy detour.
 
@@ -474,8 +474,10 @@ The write, create, and activation tools change SAP state. Confirm the target, pa
 | `GetTransport` | Read a transport request's details, objects, and tasks. |
 | `GetTransportInfo` | Find eligible transports and lock status for an ABAP object or package. |
 | `CreateTransport` | Create a transport request. |
+| `ReleaseTransport` | Release a transport request when registered by VSP and authorized in SAP. |
+| `DeleteTransport` | Delete a transport request when registered by VSP and authorized in SAP. |
 
-The proxy starts VSP with `--enable-transports` and omits `--transport-read-only`. `CreateTransport` is allowlisted, while `ReleaseTransport` and `DeleteTransport` remain filtered out. Generated MCP entries set `SAP_ALLOW_TRANSPORTABLE_EDITS=true` so source edits in transportable packages are permitted. VSP safety checks and SAP authorizations still apply.
+The proxy starts VSP with `--enable-transports` and omits `--transport-read-only`. Generated MCP entries set `SAP_ALLOW_TRANSPORTABLE_EDITS=true` so source edits in transportable packages are permitted. VSP safety checks and SAP authorizations still apply.
 
 ### 📜 Read SAP application logs (SLG1)
 
@@ -486,9 +488,9 @@ The proxy starts VSP with `--enable-transports` and omits `--transport-read-only
 - Filter by program, user, object, subobject, from, and to.
 - `max_results` defaults to 100. Date-only `to` values include the full day.
 - `messages: true` adds BALDAT details and T100 message text; otherwise, the tool returns log headers only.
-- The proxy maps this tool to the single `SAP(action="analyze", type="application_log")` operation and never exposes the general-purpose SAP router.
+- The proxy maps this convenience tool to the single `SAP(action="analyze", type="application_log")` operation. The general-purpose `SAP` router is also exposed when VSP registers it.
 
-The proxy exposes tools through an explicit allowlist. The object deletion, debugger, and trace tools requested in `tools.md` are callable; the general-purpose SAP router, `ReleaseTransport`, and `DeleteTransport` remain unavailable. Direct VSP invocation without `H2O_URL` retains the VSP binary's own tool surface.
+The proxy exposes all tools registered by the child VSP process. The object deletion, debugger, trace, general-purpose SAP router, and transport tools are callable when VSP registers them. Direct VSP invocation without `H2O_URL` retains the VSP binary's own tool surface.
 
 ### 🚀 Ready to put the tools to work from chat?
 

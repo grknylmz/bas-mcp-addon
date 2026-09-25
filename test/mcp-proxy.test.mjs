@@ -126,8 +126,8 @@ test('merges paged tools and routes calls to the selected child', async t => {
     ]) {
       assert.ok(names.has(`${destination}__${coreTool}`), `${destination} exposes ${coreTool}`);
     }
-    for (const excludedTool of ['ListSQLTraces', 'ReleaseTransport', 'DeleteTransport', 'SAP']) {
-      assert.ok(!names.has(`${destination}__${excludedTool}`), `${destination} hides ${excludedTool}`);
+    for (const formerlyExcludedTool of ['ListSQLTraces', 'ReleaseTransport', 'DeleteTransport', 'SAP']) {
+      assert.ok(names.has(`${destination}__${formerlyExcludedTool}`), `${destination} exposes ${formerlyExcludedTool}`);
     }
   }
 
@@ -150,17 +150,6 @@ test('merges paged tools and routes calls to the selected child', async t => {
   assert.deepEqual(Object.keys(applicationLog.inputSchema.properties).sort(), [
     'from', 'max_results', 'messages', 'object', 'program', 'subobject', 'to', 'user'
   ]);
-
-  for (const [index, name] of ['ListSQLTraces', 'ReleaseTransport', 'DeleteTransport', 'SAP'].entries()) {
-    const hidden = await proxy.handle({
-      jsonrpc: '2.0',
-      id: 20 + index,
-      method: 'tools/call',
-      params: { name: `alpha__${name}`, arguments: {} }
-    });
-    assert.equal(hidden.error.code, -32602);
-  }
-
 
   const read = await proxy.handle({ jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'beta__GetSource', arguments: { object: 'ZREAD' } } });
   const write = await proxy.handle({ jsonrpc: '2.0', id: 4, method: 'tools/call', params: { name: 'alpha__WriteSource', arguments: { source: 'WRITE' } } });
@@ -193,7 +182,11 @@ test('merges paged tools and routes calls to the selected child', async t => {
       params: { type: 'delete' }
     }],
     ['ActivateMultiple', { objects: ['PROG ZDEMO'] }],
-    ['CreateTransport', {}]
+    ['CreateTransport', {}],
+    ['ReleaseTransport', {}],
+    ['DeleteTransport', {}],
+    ['ListSQLTraces', {}],
+    ['SAP', { action: 'analyze', params: { type: 'application_log' } }]
   ];
   for (const [index, [name, arguments_]] of additionalCalls.entries()) {
     const response = await proxy.handle({
