@@ -41,23 +41,29 @@ Then in SAP Business Application Studio:
 1. Open the Command Palette.
 2. Run **MCP: List Servers**.
 3. Start the server named after your selected BAS destination.
-4. In GitHub Copilot Chat, choose **ABAP Developer** from the agent picker.
+4. In GitHub Copilot Chat, choose the best-fit bundled agent from the agent picker: **ABAP Developer**, **ABAP Runtime Debugger**, or **RAP Service Developer**.
 5. In the Chat tools picker, enable the server for that BAS destination.
 6. Ask Copilot what you want to inspect, build, test, or verify.
 
 **Prerequisite:** Node.js 20 or newer. If Go is not already available, the installer can provision the pinned supported Go release automatically.
 
-## 🤖 Available agent and skills
+## 🤖 Available agents and skills
 
-**Agent:** One user-invocable custom agent, **ABAP Developer**. Select it from the agent picker in GitHub Copilot Chat, as shown in Quick start.
+**Agents:** Three user-invocable custom agents are included. Select the best fit from the agent picker in GitHub Copilot Chat, as shown in Quick start.
 
-**Included skills:** `abap-development` · `abap-testing-quality` · `cds-development` · `rap-development` · `abap-debugging` · `sap-transport-release`
+| | Agent | Best for |
+| --- | --- | --- |
+| 🧑‍💻 | **ABAP Developer** | General ABAP, CDS, and RAP implementation, validation, and transport-preparation tasks |
+| 🐞 | **ABAP Runtime Debugger** | Runtime incidents, dumps, logs, traces, debugger sessions, call graphs, and performance symptoms |
+| 🚀 | **RAP Service Developer** | RAP business objects, behavior implementations, projections, service definitions, service bindings, and OData validation |
 
-If the agent is not listed, install the optional agent and skills under `$HOME/.copilot` when prompted during an interactive global install, then reload BAS if needed. Repository-scoped installation instructions appear below.
+**Included skills:** `abap-development` · `abap-testing-quality` · `cds-development` · `rap-development` · `abap-debugging` · `abap-runtime-analysis` · `rap-service-delivery` · `sap-transport-release`
+
+If the agents are not listed, install the optional agents and skills under `$HOME/.copilot` when prompted during an interactive global install, then reload BAS if needed. Repository-scoped installation instructions appear below.
 
 ## ✨ Turn Copilot Chat into an SAP development cockpit
 
-`bas-mcp-addon` installs `bas-vsp-mcp`, discovers your BAS destinations, and exposes a curated SAP development toolset through MCP. Instead of manually switching between chat, terminal commands, repository searches, ADT screens, and SAP checks, describe the outcome you want and let the ABAP Developer agent coordinate the available tools.
+`bas-mcp-addon` installs `bas-vsp-mcp`, discovers your BAS destinations, and exposes a curated SAP development toolset through MCP. Instead of manually switching between chat, terminal commands, repository searches, ADT screens, and SAP checks, describe the outcome you want and let the appropriate bundled agent coordinate the available tools.
 
 <p align="center"><strong>💬 Request → 🔎 Inspect → 🧠 Reason → 🧑‍💻 Implement → 🧪 Verify → 📋 Report</strong></p>
 
@@ -67,7 +73,7 @@ The workflow covers ABAP, CDS, RAP, repository analysis, table and query access,
 
 | | Feature | What it gives you |
 | --- | --- | --- |
-| 🤖 | **AI-driven ABAP development** | Ask for changes in natural language and let the bundled ABAP Developer agent orchestrate inspection, implementation, validation, and reporting. |
+| 🤖 | **AI-driven ABAP development** | Ask for changes in natural language and let the bundled agents orchestrate inspection, implementation, runtime diagnosis, validation, and reporting. |
 | 🧭 | **BAS destination awareness** | Discover BAS destinations and create one isolated MCP server per selected SAP system. |
 | 🔎 | **Deep repository inspection** | Read source, search objects, grep packages, find definitions and references, compare source, inspect dependencies, and analyze impact. |
 | 🧩 | **CDS + RAP development** | Inspect CDS metadata and dependencies, model CDS artifacts, and build RAP business objects and services. |
@@ -116,9 +122,9 @@ The catalog below documents 40 tool capabilities across source inspection, data,
 - Read SLG1 application logs
 - Review and create transport requests
 
-## 🧠 One agent, six focused skills
+## 🧠 Three agents, eight focused skills
 
-The package ships with the ABAP Developer custom agent plus six task-focused Copilot Agent Skills:
+The package ships with three custom agents plus eight task-focused Copilot Agent Skills:
 
 | | Skill | Best for |
 | --- | --- | --- |
@@ -127,6 +133,8 @@ The package ships with the ABAP Developer custom agent plus six task-focused Cop
 | 🧩 | `cds-development` | CDS modeling, dependency inspection, and consumer impact analysis |
 | 🚀 | `rap-development` | RAP business objects and service development |
 | 🐞 | `abap-debugging` | Dumps, logs, traces, and runtime failure diagnosis |
+| 🔬 | `abap-runtime-analysis` | Incident triage, traces, debugger state, call graphs, and performance analysis |
+| 🚀 | `rap-service-delivery` | RAP service activation, publication, OData validation, and end-to-end runtime checks |
 | 🚚 | `sap-transport-release` | Dependency checks and transport preparation; release itself is intentionally unavailable here |
 
 ## 🗺️ How it fits together
@@ -209,11 +217,11 @@ At the end of a global install, the color-coded summary shows the MCP config pat
 
 <a id="copilot-agent"></a>
 
-## 🤖 GitHub Copilot ABAP agent and skills
+## 🤖 GitHub Copilot ABAP agents and skills
 
-The package includes a user-invocable **ABAP Developer** custom agent and six task-focused Agent Skills for GitHub Copilot in BAS.
+The package includes three user-invocable custom agents (**ABAP Developer**, **ABAP Runtime Debugger**, and **RAP Service Developer**) and eight task-focused Agent Skills for GitHub Copilot in BAS.
 
-### 🧠 How the agent works
+### 🧠 How the primary ABAP Developer agent works
 
 1. **Understand the request.** Establish the expected behavior and, for SAP changes, the destination, package, and transport or temporary target. Ask only when a material detail is missing.
 2. **Inspect before editing.** Read relevant source, tests, callers, dependencies, and conventions; query the active MCP server's live `tools/list` and use its exact destination-prefixed tools and schemas.
@@ -231,24 +239,26 @@ The package includes a user-invocable **ABAP Developer** custom agent and six ta
 | 🧩 | `cds-development` | Model CDS definitions and inspect dependencies and consumers. |
 | 🚀 | `rap-development` | Build RAP business objects and services; publish only when requested. |
 | 🐞 | `abap-debugging` | Diagnose dumps, application logs, traces, and runtime failures. |
+| 🔬 | `abap-runtime-analysis` | Analyze incidents, traces, debugger state, call graphs, and performance symptoms. |
+| 🚀 | `rap-service-delivery` | Validate RAP service bindings, activation, publication, and end-to-end OData behavior. |
 | 🚚 | `sap-transport-release` | Check dependencies and prepare changes for transport; release is not available here. |
 
 ### 📥 Install for your BAS user
 
-After destination setup, the installer prints a 🤖 notice that it is waiting for confirmation, then offers to install the agent and all six skills under `$HOME/.copilot`. Press **Enter** to install; type **n** then **Enter** to skip. Declining leaves those files unchanged.
+After destination setup, the installer prints a 🤖 notice that it is waiting for confirmation, then offers to install the bundled agents and all eight skills under `$HOME/.copilot`. Press **Enter** to install; type **n** then **Enter** to skip. Declining leaves those files unchanged.
 
 These user-level customizations are available across workspaces opened by the same BAS user in the same dev space. Copilot must be available in BAS and may need a window reload to discover new files. A non-interactive install skips the optional prompt; `npm install --ignore-scripts` skips the postinstall wizard entirely.
 
 On reinstall or package upgrade, unchanged add-on-managed files are updated. Existing customizations and files edited since the previous install are preserved; postinstall reports paths that need manual review instead of overwriting them.
 
-### 🗂️ Add the agent and skills to a repository
+### 🗂️ Add the agents and skills to a repository
 
 To commit repository-scoped customizations, copy the packaged files from the BAS workspace root without overwriting existing files:
 
 ```sh
 ADDON_ROOT="$(npm root -g)/bas-mcp-addon"
 mkdir -p .github/agents .github/skills
-cp -n "$ADDON_ROOT/.github/agents/abap-developer.agent.md" .github/agents/
+cp -n "$ADDON_ROOT/.github/agents/"*.agent.md .github/agents/
 cp -Rn "$ADDON_ROOT/.github/skills/." .github/skills/
 ```
 
