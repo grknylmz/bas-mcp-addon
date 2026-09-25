@@ -1,8 +1,7 @@
 import checkbox from '@inquirer/checkbox';
 import { createInterface } from 'node:readline/promises';
 import { stdin, stdout } from 'node:process';
-import { Writable } from 'node:stream';
-import { colorText, formatStatus } from './terminal-ui.mjs';
+import { colorText, formatStatus, promptOutput, quietSpinnerTheme } from './terminal-ui.mjs';
 import { discoverDestinations, remediation } from './bas-discovery.mjs';
 import { discoverCloudFoundryDestinations, getCloudFoundryTarget, deleteManagedCloudFoundryServiceKeys } from './cf-destination.mjs';
 import { collectCloudFoundryKeyReferencesFromAllEntries, collectManagedCloudFoundryKeyReferences, installMcpConfig, readMcpConfig, resolveMcpConfigPath } from './mcp-config.mjs';
@@ -202,17 +201,13 @@ export async function runSetup({
   print(output, '  Space = select/deselect · a = toggle all · Enter = confirm.');
   print(output, '  Nothing selected removes this add-on’s MCP entries.');
   print(output, '');
-  const promptOutput = new Writable({
-    write(chunk, encoding, callback) {
-      output.write(chunk, encoding, callback);
-    }
-  });
   const selected = await checkbox({
     message: colorText('🧭 Select destinations', 'cyan', output),
     choices,
     required: false,
-    shortcuts: { all: 'a', invert: null }
-  }, { input, output: promptOutput });
+    shortcuts: { all: 'a', invert: null },
+    theme: quietSpinnerTheme
+  }, { input, output: promptOutput(output) });
   try {
     const result = await install(selected, { env });
     const location = result?.path ? ` in ${result.path}` : '';

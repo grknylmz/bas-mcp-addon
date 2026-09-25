@@ -1,13 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import { execFile as nodeExecFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { Writable } from 'node:stream';
 import { stdin, stdout } from 'node:process';
 import checkbox from '@inquirer/checkbox';
 import { ProxyAgent, fetch as undiciFetch } from 'undici';
 import { sanitizeChildEnv } from './bas-discovery.mjs';
 import { createCfConnectivityProxy } from './cf-connectivity.mjs';
-import { colorText } from './terminal-ui.mjs';
+import { colorText, promptOutput, quietSpinnerTheme } from './terminal-ui.mjs';
 
 const REQUEST_TIMEOUT_MS = 10_000;
 const COMMAND_TIMEOUT_MS = 30_000;
@@ -308,10 +307,6 @@ function destinationDescriptor(record, spaceGuid, instance, keyName, connectivit
   };
 }
 
-function promptOutput(output) {
-  return new Writable({ write(chunk, encoding, callback) { output.write(chunk, encoding, callback); } });
-}
-
 async function chooseInstances(instances, { input = stdin, output = stdout, message }) {
   if (instances.length === 1) return instances;
   const selected = await checkbox({
@@ -322,7 +317,8 @@ async function chooseInstances(instances, { input = stdin, output = stdout, mess
       checked: false
     })),
     required: false,
-    shortcuts: { all: 'a', invert: null }
+    shortcuts: { all: 'a', invert: null },
+    theme: quietSpinnerTheme
   }, { input, output: promptOutput(output) });
   return selected;
 }
@@ -334,7 +330,8 @@ async function chooseConnectivity(instances, { input = stdin, output = stdout })
     choices: instances.map(instance => ({ value: instance, name: `${instance.name || instance.guid} (${instance.guid})`, checked: false })),
     required: false,
     validate: values => values.length <= 1 || 'Select at most one Connectivity service instance',
-    shortcuts: { all: 'a', invert: null }
+    shortcuts: { all: 'a', invert: null },
+    theme: quietSpinnerTheme
   }, { input, output: promptOutput(output) });
   return selected[0];
 }

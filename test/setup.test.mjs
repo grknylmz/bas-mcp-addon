@@ -1,11 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { spawn } from 'node:child_process';
+import { stripVTControlCharacters } from 'node:util';
 import { PassThrough } from 'node:stream';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { installMcpConfig } from '../src/mcp-config.mjs';
 import { runSetup } from '../src/setup.mjs';
 
@@ -23,6 +25,33 @@ function outputStream() {
   output.text = () => chunks.join('');
   output.resume();
   return output;
+}
+
+function runSetupVisibilityInPty(fixture, env, keys = '\r') {
+  return new Promise((resolve, reject) => {
+    const command = `stty cols 48 rows 12; ${JSON.stringify(process.execPath)} ${JSON.stringify(fixture)}`;
+    const child = spawn('script', ['-qec', command, '/dev/null'], { env, stdio: ['pipe', 'pipe', 'pipe'] });
+    let stdout = '';
+    let stderr = '';
+    let selectionSent = false;
+    const timeout = setTimeout(() => child.kill('SIGKILL'), 15000);
+    child.stdout.on('data', chunk => {
+      stdout += chunk.toString();
+      if (!selectionSent && stdout.includes('Select destinations')) {
+        selectionSent = true;
+        setTimeout(() => child.stdin.write(keys), 500);
+      }
+    });
+    child.stderr.on('data', chunk => { stderr += chunk.toString(); });
+    child.on('error', error => {
+      clearTimeout(timeout);
+      reject(error);
+    });
+    child.on('exit', (code, signal) => {
+      clearTimeout(timeout);
+      resolve({ code, signal, stdout, stderr, selectionSent });
+    });
+  });
 }
 
 function runPostinstallInPty(env, keys, assetsAnswer = '\r') {
@@ -133,6 +162,46 @@ test('does not overwrite malformed MCP JSON', async () => {
   try {
     await assert.rejects(() => installMcpConfig([], { env: { H2O_URL: 'http://h2o.example' }, path }), /invalid JSON/);
     assert.equal(await readFile(path, 'utf8'), original);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('setup checkbox remains visible in a narrow live TTY without spinner artifacts', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'bas-setup-visibility-'));
+  const fixture = join(directory, 'visibility-fixture.mjs');
+  const bin = join(directory, 'bin');
+  await mkdir(bin);
+  await writeFile(join(bin, 'cf'), '#!/bin/sh\nexit 1\n', { mode: 0o755 });
+  await writeFile(fixture, `
+import { runSetup } from ${JSON.stringify(pathToFileURL(join(process.cwd(), 'src/setup.mjs')).href)};
+const destinations = [
+  { name: 'S4H', client: '100', authentication: 'Basic', probe: { status: 'available', available: true } },
+  { name: 'VeryLongDestinationNameForWrapping', client: '200', authentication: 'Basic', probe: { status: 'available', available: true } }
+];
+await runSetup({
+  env: { ...process.env, H2O_URL: 'http://h2o.example', PATH: ${JSON.stringify(`${bin}:${process.env.PATH || ''}`)} },
+  discover: async () => destinations,
+  install: async selected => ({ path: process.env.BAS_VSP_MCP_CONFIG, servers: Object.fromEntries(selected.map(destination => [destination.name, { env: { BAS_VSP_DESTINATION: destination.name } }])) })
+});
+`);
+  try {
+    const env = {
+      ...process.env,
+      BAS_VSP_MCP_CONFIG: join(directory, 'mcp.json'),
+      FORCE_COLOR: '1',
+      PATH: `${bin}:${process.env.PATH || ''}`
+    };
+    delete env.NO_COLOR;
+    const result = await runSetupVisibilityInPty(fixture, env, '\r');
+    const logs = `${result.stdout}\n${result.stderr}`;
+    const visible = stripVTControlCharacters(logs);
+    assert.equal(result.code, 0, logs);
+    assert.equal(result.selectionSent, true, logs);
+    assert.match(visible, /[❯>]\s*◯ S4H \(BAS, client 100, ok:available\)/u, visible);
+    assert.match(visible, /Configured 0 MCP servers/u, visible);
+    assert.doesNotMatch(logs, /[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]/u, logs);
+    assert.doesNotMatch(logs, /⏳/u, logs);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

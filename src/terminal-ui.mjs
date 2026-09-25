@@ -1,3 +1,5 @@
+import { Writable } from 'node:stream';
+
 const COLORS = {
   cyan: '\u001b[1;36m',
   green: '\u001b[1;32m',
@@ -8,7 +10,7 @@ const COLORS = {
 };
 
 const STATUS = {
-  progress: { icon: '⏳', color: 'cyan' },
+  progress: { icon: '…', color: 'cyan' },
   info: { icon: 'ℹ️', color: 'cyan' },
   success: { icon: '✅', color: 'green' },
   warning: { icon: '⚠️', color: 'yellow' },
@@ -39,3 +41,27 @@ export function formatStatus(message, tone, output, label = 'bas-mcp-addon') {
   const { icon, color } = STATUS[tone] || STATUS.info;
   return `${iconLabel(icon, label, color, output)} ${message}`;
 }
+
+export function promptOutput(output) {
+  const proxy = new Writable({
+    write(chunk, encoding, callback) {
+      output.write(chunk, encoding, callback);
+    }
+  });
+  for (const property of ['isTTY', 'columns', 'rows']) {
+    Object.defineProperty(proxy, property, {
+      enumerable: true,
+      get: () => output?.[property]
+    });
+  }
+  for (const method of ['getColorDepth', 'hasColors']) {
+    if (typeof output?.[method] === 'function') {
+      proxy[method] = (...args) => output[method](...args);
+    }
+  }
+  return proxy;
+}
+
+export const quietSpinnerTheme = {
+  spinner: { interval: 80, frames: [''] }
+};

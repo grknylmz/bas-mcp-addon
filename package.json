@@ -1,6 +1,6 @@
 {
   "name": "bas-mcp-addon",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "SAP Business Application Studio MCP entry point for vibing-steampunk ADT tools",
   "author": "Gurkan Yilmaz",
   "type": "module",
@@ -18,6 +18,8 @@
   "scripts": {
     "postinstall": "node scripts/postinstall.mjs",
     "test": "node --test test/*.test.mjs",
+    "test:visibility": "node --test test/setup.test.mjs test/terminal-ui.test.mjs",
+    "test:mutation": "node scripts/mutation-terminal-ui.mjs",
     "publish:npm": "node scripts/publish-npm.mjs",
     "ensure:go": "node scripts/ensure-go.mjs",
     "build:vsp": "node scripts/build-vsp.mjs"
