@@ -71,11 +71,22 @@ async function runCopilotAssetInstall() {
       return;
     }
     const copilotRoot = join(process.env.HOME || homedir(), '.copilot');
-    await announce(`Optional Copilot setup is waiting for your choice.\nPress Enter to install the ABAP Developer agent and six skills in the path shown below; type n then press Enter to skip.`, 'copilot');
+    await announce([
+      'Optional Copilot setup is waiting for your choice.',
+      '',
+      'Press Enter to install the ABAP Developer agent and six skills in the path shown below; type n then press Enter to skip.',
+      '',
+      `${colorText('✅ Press Enter', 'green', true)} to install the ABAP Developer agent and six skills.`,
+      `${colorText('⏭️  Type n then Enter', 'yellow', true)} to skip this optional step.`,
+      '',
+      `${colorText('📁 Target folder:', 'cyan', true)}`,
+      `   ${copilotRoot}`,
+      ''
+    ].join('\n'), 'copilot');
     const prompt = createInterface({ input: terminal.input, output: terminal.output });
     let answer;
     try {
-      answer = await prompt.question(`🤖 Install the ABAP Developer agent and six skills in "${copilotRoot}"? [Y/n] `);
+      answer = await prompt.question(`${colorText('🤖 Install the ABAP Developer agent and six skills?', 'magenta', terminal.output)} ${colorText('[Y/n]', 'yellow', terminal.output)} `);
     } finally {
       prompt.close();
     }

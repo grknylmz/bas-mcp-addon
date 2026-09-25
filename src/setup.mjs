@@ -73,9 +73,11 @@ function safeCloudFoundryDestination(destination) {
 function printConnectionInstructions(output, result) {
   const servers = Object.entries(result?.servers || {});
   if (!servers.length) {
+    print(output, '');
     print(output, formatStatus('No destinations were selected; no MCP servers were added.', 'info', output, 'BAS setup'));
     return;
   }
+  print(output, '');
   print(output, colorText('📡 MCP servers now available:', 'cyan', output));
   for (const [name, entry] of servers) {
     print(output, `  • ${name} — destination: ${entry.env?.BAS_VSP_DESTINATION || 'unknown'}`);
@@ -102,6 +104,7 @@ export async function runSetup({
     print(output, formatStatus(`Interactive setup needs a terminal. Rerun ${SETUP_COMMAND} from a BAS terminal.`, 'warning', output, 'BAS setup'));
     return { skipped: true, reason: 'non-tty' };
   }
+  print(output, '');
   print(output, formatStatus('Contacting BAS to discover destinations; this may take a moment.', 'progress', output, 'Setup'));
 
   let basDestinations;
@@ -174,22 +177,31 @@ export async function runSetup({
     return { skipped: true, reason: 'no-destinations', warnings: [...warnings, ...cleanupWarnings] };
   }
 
-  const choices = destinations.map(destination => {
+  const orderedDestinations = [...destinations].sort((left, right) => {
+    const leftRank = left.disabledReason ? 2 : (left.probe?.available === false ? 1 : 0);
+    const rightRank = right.disabledReason ? 2 : (right.probe?.available === false ? 1 : 0);
+    return leftRank - rightRank || String(left.name).localeCompare(String(right.name));
+  });
+  const choices = orderedDestinations.map(destination => {
     const probe = destination.probe?.status || 'unknown';
-    const availability = destination.probe?.available === false ? ' unavailable' : '';
     const source = destination.source === 'cloud-foundry'
       ? `CF ${destination.cf.destinationInstanceName}`
       : 'BAS';
     const disabled = destination.disabledReason;
+    const state = disabled ? 'disabled' : (destination.probe?.available === false ? `fail:${probe}` : `ok:${probe}`);
     return {
       value: destination,
-      name: `${destination.name} (${source}; client=${destination.client} authentication=${destination.authentication} probe=${probe}${availability}${disabled ? `; disabled: ${disabled}` : ''})`,
+      name: `${destination.name} (${source}, client ${destination.client}, ${state})`,
       ...(disabled ? { disabled } : {}),
       checked: false
     };
   });
-  print(output, formatStatus('Choose the destinations to add.', 'step', output, 'Setup'));
-  print(output, '  Space = select/deselect · a = toggle all · Enter = confirm. Nothing selected removes this add-on’s MCP entries.');
+  print(output, '');
+  print(output, formatStatus('Choose the destinations to add. Reachable destinations are shown first.', 'step', output, 'Setup'));
+  print(output, '');
+  print(output, '  Space = select/deselect · a = toggle all · Enter = confirm.');
+  print(output, '  Nothing selected removes this add-on’s MCP entries.');
+  print(output, '');
   const promptOutput = new Writable({
     write(chunk, encoding, callback) {
       output.write(chunk, encoding, callback);
@@ -204,6 +216,7 @@ export async function runSetup({
   try {
     const result = await install(selected, { env });
     const location = result?.path ? ` in ${result.path}` : '';
+    print(output, '');
     print(output, formatStatus(`Configured ${selected.length} MCP server${selected.length === 1 ? '' : 's'}${location}.`, 'success', output, 'BAS setup'));
     printConnectionInstructions(output, result);
     let cleanupWarnings = [];
