@@ -1,13 +1,11 @@
-import checkbox from '@inquirer/checkbox';
 import { createInterface } from 'node:readline/promises';
 import { stdin, stdout } from 'node:process';
-import { colorText, formatStatus, promptOutput, quietSpinnerTheme } from './terminal-ui.mjs';
+import { checkboxPrompt, colorText, formatStatus } from './terminal-ui.mjs';
 import { discoverDestinations, remediation } from './bas-discovery.mjs';
 import { discoverCloudFoundryDestinations, getCloudFoundryTarget, deleteManagedCloudFoundryServiceKeys } from './cf-destination.mjs';
-import { collectCloudFoundryKeyReferencesFromAllEntries, collectManagedCloudFoundryKeyReferences, installMcpConfig, readMcpConfig, resolveMcpConfigPath } from './mcp-config.mjs';
-import { brandedEnvValue } from './branding.mjs';
+import { SAP_DEVELOPMENT_MCP_SERVERS, collectCloudFoundryKeyReferencesFromAllEntries, collectManagedCloudFoundryKeyReferences, installMcpConfig, readMcpConfig, resolveMcpConfigPath } from './mcp-config.mjs';
 
-const SETUP_COMMAND = 'sap-ai-dev-toolkit --setup';
+const SETUP_COMMAND = 'sap-ai-dev --setup';
 
 function print(output, message) {
   output.write(`${message}\n`);
@@ -80,7 +78,10 @@ function printConnectionInstructions(output, result) {
   print(output, '');
   print(output, colorText('📡 MCP servers now available:', 'cyan', output));
   for (const [name, entry] of servers) {
-    print(output, `  • ${name} — destination: ${brandedEnvValue(entry.env, 'DESTINATION') || 'unknown'}`);
+    const detail = entry.env?.BAS_VSP_DESTINATION
+      ? `destination: ${entry.env.BAS_VSP_DESTINATION}`
+      : (entry.displayName ? `tool server: ${entry.displayName}` : 'tool server');
+    print(output, `  • ${name} — ${detail}`);
   }
   print(output, formatStatus('Open the Command Palette → “MCP: List Servers”, select a generated server, and choose “Start Server”.', 'step', output, 'Next'));
   print(output, formatStatus('Inspect or edit entries with “MCP: Open User Configuration”.', 'info', output, 'Config'));
@@ -94,7 +95,8 @@ export async function runSetup({
   discover = discoverDestinations,
   discoverCf = discoverCloudFoundryDestinations,
   confirmCfImport = confirmCloudFoundryImport,
-  install = installMcpConfig
+  install = installMcpConfig,
+  includeSapDevelopmentToolsPrompt = false
 } = {}) {
   if (!env.H2O_URL) {
     print(output, formatStatus(`Setup skipped: H2O_URL is not set. Run ${SETUP_COMMAND} in a BAS dev space.`, 'info', output, 'SAP AI Dev Toolkit'));
@@ -202,18 +204,36 @@ export async function runSetup({
   print(output, '  Space = select/deselect · a = toggle all · Enter = confirm.');
   print(output, '  Nothing selected removes this add-on’s MCP entries.');
   print(output, '');
-  const selected = await checkbox({
+  const selected = await checkboxPrompt({
     message: colorText('🧭 Select destinations', 'cyan', output),
     choices,
     required: false,
-    shortcuts: { all: 'a', invert: null },
-    theme: quietSpinnerTheme
-  }, { input, output: promptOutput(output) });
+    shortcuts: { all: 'a' }
+  }, { input, output });
+
+  let sapDevelopmentServers = [];
+  if (includeSapDevelopmentToolsPrompt) {
+    print(output, '');
+    print(output, formatStatus('Optionally add companion MCP servers for full-stack SAP development.', 'step', output, 'Tools'));
+    print(output, '  Recommended for RAP/Fiori/CAP/UI validation work. Leave empty to only configure ABAP/ADT destination servers.');
+    print(output, '');
+    sapDevelopmentServers = await checkboxPrompt({
+      message: colorText('🧰 Select companion tools', 'cyan', output),
+      choices: SAP_DEVELOPMENT_MCP_SERVERS.map(server => ({
+        value: server.id,
+        name: `${server.name} — ${server.description}`,
+        checked: false
+      })),
+      required: false,
+      shortcuts: { all: 'a' }
+    }, { input, output });
+  }
   try {
-    const result = await install(selected, { env });
+    const result = await install(selected, { env, sapDevelopmentServers });
     const location = result?.path ? ` in ${result.path}` : '';
     print(output, '');
-    print(output, formatStatus(`Configured ${selected.length} MCP server${selected.length === 1 ? '' : 's'}${location}.`, 'success', output, 'SAP AI Dev Toolkit'));
+    const configuredCount = selected.length + sapDevelopmentServers.length;
+    print(output, formatStatus(`Configured ${configuredCount} MCP server${configuredCount === 1 ? '' : 's'}${location}.`, 'success', output, 'BAS setup'));
     printConnectionInstructions(output, result);
     let cleanupWarnings = [];
     const finalPath = result?.path || configPath;

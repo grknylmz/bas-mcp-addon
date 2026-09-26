@@ -2,12 +2,10 @@ import { randomUUID } from 'node:crypto';
 import { execFile as nodeExecFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { stdin, stdout } from 'node:process';
-import checkbox from '@inquirer/checkbox';
 import { ProxyAgent, fetch as undiciFetch } from 'undici';
 import { sanitizeChildEnv } from './bas-discovery.mjs';
 import { createCfConnectivityProxy } from './cf-connectivity.mjs';
-import { colorText, promptOutput, quietSpinnerTheme } from './terminal-ui.mjs';
-import { brandedEnvValue } from './branding.mjs';
+import { checkboxPrompt, colorText } from './terminal-ui.mjs';
 
 const REQUEST_TIMEOUT_MS = 10_000;
 const COMMAND_TIMEOUT_MS = 30_000;
@@ -310,7 +308,7 @@ function destinationDescriptor(record, spaceGuid, instance, keyName, connectivit
 
 async function chooseInstances(instances, { input = stdin, output = stdout, message }) {
   if (instances.length === 1) return instances;
-  const selected = await checkbox({
+  const selected = await checkboxPrompt({
     message: colorText(`☁️ ${message}`, 'cyan', output),
     choices: instances.map(instance => ({
       value: instance,
@@ -318,22 +316,20 @@ async function chooseInstances(instances, { input = stdin, output = stdout, mess
       checked: false
     })),
     required: false,
-    shortcuts: { all: 'a', invert: null },
-    theme: quietSpinnerTheme
-  }, { input, output: promptOutput(output) });
+    shortcuts: { all: 'a' }
+  }, { input, output });
   return selected;
 }
 
 async function chooseConnectivity(instances, { input = stdin, output = stdout }) {
   if (instances.length === 1) return instances[0];
-  const selected = await checkbox({
+  const selected = await checkboxPrompt({
     message: colorText('🔌 Select one Connectivity service instance', 'cyan', output),
     choices: instances.map(instance => ({ value: instance, name: `${instance.name || instance.guid} (${instance.guid})`, checked: false })),
     required: false,
     validate: values => values.length <= 1 || 'Select at most one Connectivity service instance',
-    shortcuts: { all: 'a', invert: null },
-    theme: quietSpinnerTheme
-  }, { input, output: promptOutput(output) });
+    shortcuts: { all: 'a' }
+  }, { input, output });
   return selected[0];
 }
 
@@ -679,7 +675,7 @@ function cfServerName(env, name) {
 
 function validateRuntimeRecord(record, connectivityAvailable) {
   const reason = reasonFor(record, connectivityAvailable);
-  if (reason) throw new Error(`Configured CF destination is unavailable: ${reason}. Rerun sap-ai-dev-toolkit --setup after correcting the Destination service record.`);
+  if (reason) throw new Error(`Configured CF destination is unavailable: ${reason}. Rerun sap-ai-dev --setup after correcting the Destination service record.`);
 }
 
 async function verifyServiceInstance(instanceGuid, instanceName, spaceGuid, kind, options) {
@@ -701,7 +697,7 @@ export async function resolveConfiguredCloudFoundryDestination({ env = process.e
   const destinationKeyName = configuredValue(env, 'BAS_CF_DESTINATION_KEY');
   const name = configuredValue(env, 'BAS_CF_DESTINATION_NAME') || text(brandedEnvValue(env, 'DESTINATION'));
   if (!spaceGuid || !destinationInstanceGuid || !destinationInstanceName || !destinationKeyName || !name) {
-    throw new Error('Cloud Foundry destination configuration is incomplete; rerun sap-ai-dev-toolkit --setup.');
+    throw new Error('Cloud Foundry destination configuration is incomplete; rerun sap-ai-dev --setup.');
   }
   const target = await getCloudFoundryTarget({ env, execFileImpl });
   if (!target.available) throw new Error(`${target.reason.replace(/; CF destinations were skipped\.$/, '')}; run cf target for the configured space and retry.`);
@@ -710,22 +706,22 @@ export async function resolveConfiguredCloudFoundryDestination({ env = process.e
   try {
     await verifyServiceInstance(destinationInstanceGuid, destinationInstanceName, spaceGuid, 'Destination', options);
   } catch {
-    throw new Error(`Configured Destination service instance ${destinationInstanceName} is unavailable in the configured CF space; rerun sap-ai-dev-toolkit --setup.`);
+    throw new Error(`Configured Destination service instance ${destinationInstanceName} is unavailable in the configured CF space; rerun sap-ai-dev --setup.`);
   }
   let destinationCredentials;
   try {
     destinationCredentials = await serviceKeyCredentials(destinationInstanceName, destinationKeyName, 'destination', options);
   } catch {
-    throw new Error(`Managed Destination service key ${destinationKeyName} for ${destinationInstanceName} is unavailable; rerun sap-ai-dev-toolkit --setup in the configured space.`);
+    throw new Error(`Managed Destination service key ${destinationKeyName} for ${destinationInstanceName} is unavailable; rerun sap-ai-dev --setup in the configured space.`);
   }
   let records;
   try {
     records = await destinationRecords(destinationCredentials, fetchImpl);
   } catch {
-    throw new Error(`Destination service instance ${destinationInstanceName} could not be read; verify CF login and rerun sap-ai-dev-toolkit --setup.`);
+    throw new Error(`Destination service instance ${destinationInstanceName} could not be read; verify CF login and rerun sap-ai-dev --setup.`);
   }
   const found = records.find(item => item.record.name === name);
-  if (!found || found.detailsFailed) throw new Error(`Destination ${name} is no longer available from instance ${destinationInstanceName}; rerun sap-ai-dev-toolkit --setup.`);
+  if (!found || found.detailsFailed) throw new Error(`Destination ${name} is no longer available from instance ${destinationInstanceName}; rerun sap-ai-dev --setup.`);
   const record = found.record;
   const serverName = cfServerName(env, name);
   const isOnPremise = record.proxyType === 'OnPremise';
@@ -743,20 +739,20 @@ export async function resolveConfiguredCloudFoundryDestination({ env = process.e
     const connectivityInstanceName = configuredValue(env, 'BAS_CF_CONNECTIVITY_INSTANCE');
     const connectivityKeyName = configuredValue(env, 'BAS_CF_CONNECTIVITY_KEY');
     if (!configuredValue(env, 'BAS_CF_CONNECTIVITY_INSTANCE_GUID') || !connectivityInstanceName || !connectivityKeyName) {
-      throw new Error(`Configured OnPremise destination ${name} has no Connectivity service reference; rerun sap-ai-dev-toolkit --setup.`);
+      throw new Error(`Configured OnPremise destination ${name} has no Connectivity service reference; rerun sap-ai-dev --setup.`);
     }
     try {
       await verifyServiceInstance(configuredValue(env, 'BAS_CF_CONNECTIVITY_INSTANCE_GUID'), connectivityInstanceName, spaceGuid, 'Connectivity', options);
     } catch {
-      throw new Error(`Configured Connectivity service instance ${connectivityInstanceName} is unavailable in the configured CF space; rerun sap-ai-dev-toolkit --setup.`);
+      throw new Error(`Configured Connectivity service instance ${connectivityInstanceName} is unavailable in the configured CF space; rerun sap-ai-dev --setup.`);
     }
     let credentials;
     try {
       credentials = await serviceKeyCredentials(connectivityInstanceName, connectivityKeyName, 'connectivity', options);
     } catch {
-      throw new Error(`Managed Connectivity service key ${connectivityKeyName} for ${connectivityInstanceName} is unavailable; rerun sap-ai-dev-toolkit --setup in the configured space.`);
+      throw new Error(`Managed Connectivity service key ${connectivityKeyName} for ${connectivityInstanceName} is unavailable; rerun sap-ai-dev --setup in the configured space.`);
     }
-    if (!connectivityCredentialsValid(credentials)) throw new Error(`Connectivity service credentials for ${connectivityInstanceName} are incomplete; rerun sap-ai-dev-toolkit --setup.`);
+    if (!connectivityCredentialsValid(credentials)) throw new Error(`Connectivity service credentials for ${connectivityInstanceName} are incomplete; rerun sap-ai-dev --setup.`);
     let route;
     try {
       const authMode = record.authentication === 'PrincipalPropagation' ? 'principal-propagation' : 'application';

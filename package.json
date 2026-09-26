@@ -1,7 +1,7 @@
 {
   "name": "sap-ai-dev-toolkit",
-  "version": "0.2.3",
-  "description": "SAP AI development toolkit for ABAP, CDS, and RAP workflows through MCP",
+  "version": "0.2.7",
+  "description": "SAP AI development toolkit for BAS, ABAP, RAP, CAP, Fiori, UI5, and MCP",
   "author": "Gurkan Yilmaz",
   "type": "module",
   "engines": {
@@ -9,11 +9,11 @@
   },
   "dependencies": {
     "@abaplint/core": "2.119.0",
-    "@inquirer/checkbox": "4.2.0",
+    "terminal-kit": "^3.1.4",
     "undici": "^6.21.3"
   },
   "bin": {
-    "sap-ai-dev-toolkit": "src/launcher.mjs"
+    "sap-ai-dev": "src/launcher.mjs"
   },
   "scripts": {
     "postinstall": "node scripts/postinstall.mjs",

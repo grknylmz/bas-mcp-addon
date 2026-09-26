@@ -19,11 +19,12 @@ function json(value) { process.stdout.write(`${JSON.stringify(value)}\n`); }
 
 function usage() {
   return [
-    'Usage: sap-ai-dev-toolkit [options]',
+    'Usage: sap-ai-dev [options]',
     '',
     'With H2O_URL set and no command, starts the SAP AI Dev Toolkit stdio server for selected BAS destinations.',
     'Options:',
-    '  --setup                  Configure SAP AI Dev Toolkit servers for selected BAS destinations',
+    '  --setup                  Configure generated BAS MCP servers',
+    '  --tools                  Also offer full-stack SAP companion MCP servers (use with --setup)',
     '  --npx                    Launch configured MCP servers through the pinned npm package (use with --setup)',
     '  --list-destinations      List discovered BAS destinations',
     '  --list-destinations --json  Print redacted JSON status',
@@ -129,7 +130,7 @@ function probeDiagnostic(destination) {
       .slice(0, 400);
     details.push(error);
   }
-  return `[sap-ai-dev-toolkit] ${destination.name}: probe=${probe.status || 'unknown'}${details.length ? ` (${details.join('; ')})` : ''}`;
+  return `[sap-ai-dev] ${destination.name}: probe=${probe.status || 'unknown'}${details.length ? ` (${details.join('; ')})` : ''}`;
 }
 
 async function binaryOrError() {
@@ -175,13 +176,17 @@ async function main() {
     return;
   }
   if (setup) {
-    await runSetup(hasFlag('--npx') ? {
-      install: (selected, options) => installMcpConfig(selected, {
+    const setupOptions = {
+      includeSapDevelopmentToolsPrompt: hasFlag('--tools') || hasFlag('--companion-tools')
+    };
+    if (hasFlag('--npx')) {
+      setupOptions.install = (selected, options) => installMcpConfig(selected, {
         ...options,
         command: 'npx',
-        args: ['--yes', '--ignore-scripts', `--package=sap-ai-dev-toolkit@${pkg.version}`, 'sap-ai-dev-toolkit']
-      })
-    } : undefined);
+        args: ['--yes', '--ignore-scripts', `--package=sap-ai-dev-toolkit@${pkg.version}`, 'sap-ai-dev']
+      });
+    }
+    await runSetup(setupOptions);
     return;
   }
   if (check || list) {
@@ -228,12 +233,12 @@ async function main() {
   for (const destination of discovered) console.error(probeDiagnostic(destination));
   const destinations = discovered;
   if (!destinations.length) {
-    console.error('[sap-ai-dev-toolkit] destination discovery returned no named BAS destinations');
+    console.error('[sap-ai-dev] destination discovery returned no named BAS destinations');
     throw new Error(remediation);
   }
   const binary = await binaryOrError();
-  console.error(`[sap-ai-dev-toolkit] starting MCP proxy for ${destinations.map(destination => `${destination.name} (client=${destination.client})`).join(', ')}`);
-  const proxy = new MCPProxy({ binary, destinations, env: runtimeEnv, log: message => console.error(message) });
+  console.error(`[sap-ai-dev] starting MCP proxy for ${destinations.map(destination => `${destination.name} (client=${destination.client})`).join(', ')}`);
+  const proxy = new MCPProxy({ binary, destinations, env: process.env, log: message => console.error(message) });
   const shutdown = signal => { void proxy.close().finally(() => process.exit(signal === 'SIGINT' ? 130 : 143)); };
   process.once('SIGINT', () => shutdown('SIGINT'));
   process.once('SIGTERM', () => shutdown('SIGTERM'));
@@ -241,6 +246,6 @@ async function main() {
 }
 
 main().catch(error => {
-  console.error(`sap-ai-dev-toolkit: ${error.message}`);
+  console.error(`sap-ai-dev: ${error.message}`);
   process.exitCode = 1;
 });

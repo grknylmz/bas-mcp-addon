@@ -40,8 +40,8 @@ export function releaseBaseUrl(pkg, version = pkg.version) {
   return `${repo}/releases/download/v${version}`;
 }
 
-export function cacheDirectory(env = process.env) {
-  return brandedEnvValue(env, 'CACHE_DIR') || join(env.XDG_CACHE_HOME || join(homedir(), '.cache'), 'sap-ai-dev-toolkit');
+export function cacheDirectory() {
+  return process.env.BAS_VSP_CACHE_DIR || join(process.env.XDG_CACHE_HOME || join(homedir(), '.cache'), 'sap-ai-dev-toolkit');
 }
 
 export function cachedBinaryPath(pkg, platform = process.platform, arch = process.arch, env = process.env) {

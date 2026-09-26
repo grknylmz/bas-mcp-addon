@@ -4,7 +4,43 @@ import { homedir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import { brandedEnvValue } from './branding.mjs';
 
-const LEGACY_MCP_SERVER_PREFIX = 'basVspMcp_';
+const LEGACY_MCP_SERVER_PREFIXES = ['sapAiDev_', 'basVspMcp_'];
+const COMPANION_SERVER_KIND = 'sap-development-companion';
+
+export const SAP_DEVELOPMENT_MCP_SERVERS = Object.freeze([
+  Object.freeze({
+    id: 'sap-fiori-tools',
+    name: 'SAP Fiori tools',
+    description: 'SAP Fiori elements/freestyle project generation, annotations, and UX guidance.',
+    packageName: '@sap-ux/fiori-mcp-server',
+    bin: 'fiori-mcp',
+    priority: 'recommended'
+  }),
+  Object.freeze({
+    id: 'ui5-tools',
+    name: 'UI5 tools',
+    description: 'SAPUI5/OpenUI5 project inspection, UI5-aware help, and lint/project support.',
+    packageName: '@ui5/mcp-server',
+    bin: 'ui5mcp',
+    priority: 'recommended'
+  }),
+  Object.freeze({
+    id: 'cap-tools',
+    name: 'CAP tools',
+    description: 'CAP CDS/service model inspection and AI-assisted CAP application development.',
+    packageName: '@cap-js/mcp-server',
+    bin: 'cds-mcp',
+    priority: 'recommended'
+  }),
+  Object.freeze({
+    id: 'browser-validation',
+    name: 'Browser validation',
+    description: 'Playwright browser automation for Fiori/UI smoke tests, screenshots, and runtime checks.',
+    packageName: '@playwright/mcp',
+    bin: 'playwright-mcp',
+    priority: 'recommended'
+  })
+]);
 
 async function exists(path) {
   try {
@@ -31,6 +67,27 @@ export async function resolveMcpConfigPath(env = process.env) {
 
 export function generatedServerName(destinationName) {
   return String(destinationName);
+}
+
+export function buildSapDevelopmentMcpEntries(serverIds = SAP_DEVELOPMENT_MCP_SERVERS.map(server => server.id), { packageVersions = {}, packageManager = 'npx' } = {}) {
+  const selected = new Set(serverIds);
+  const entries = Object.create(null);
+  for (const server of SAP_DEVELOPMENT_MCP_SERVERS) {
+    if (!selected.has(server.id)) continue;
+    const packageSpec = packageVersions[server.id] || packageVersions[server.packageName] || server.packageName;
+    entries[server.id] = {
+      type: 'stdio',
+      command: packageManager,
+      args: ['--yes', `--package=${packageSpec}`, server.bin],
+      BAS_EXT: 'true',
+      BAS_EXT_KIND: COMPANION_SERVER_KIND,
+      displayName: server.name,
+      description: server.description
+    };
+  }
+  const unknown = [...selected].filter(id => !SAP_DEVELOPMENT_MCP_SERVERS.some(server => server.id === id));
+  if (unknown.length) throw new Error(`Unknown SAP development MCP server id${unknown.length === 1 ? '' : 's'}: ${unknown.join(', ')}`);
+  return entries;
 }
 
 export function buildMcpEntries(destinations, env = process.env) {
@@ -70,7 +127,7 @@ export function buildMcpEntries(destinations, env = process.env) {
     }
     entries[name] = {
       type: 'stdio',
-      command: 'sap-ai-dev-toolkit',
+      command: 'sap-ai-dev',
       env: entryEnv,
       BAS_EXT: 'true'
     };
@@ -78,17 +135,18 @@ export function buildMcpEntries(destinations, env = process.env) {
   return entries;
 }
 
+function isCompanionServer(entry) {
+  return entry?.BAS_EXT === 'true' && entry?.BAS_EXT_KIND === COMPANION_SERVER_KIND;
+}
+
 function isPackageLauncher(entry) {
+  const commands = new Set(['sap-ai-dev', 'sap-ai-dev-toolkit', 'bas-vsp-mcp']);
+  const packages = [/^--package=sap-ai-dev-toolkit(?:@[^/]+)?$/, /^--package=bas-mcp-addon(?:@[^/]+)?$/];
   const npxLauncher = entry?.command === 'npx'
     && Array.isArray(entry.args)
-    && entry.args.some(argument => argument === 'sap-ai-dev-toolkit' || argument === 'bas-vsp-mcp')
-    && entry.args.some(argument => typeof argument === 'string' && (
-      argument === '--package=sap-ai-dev-toolkit'
-      || /^--package=sap-ai-dev-toolkit@[^/]+$/.test(argument)
-      || argument === '--package=bas-mcp-addon'
-      || /^--package=bas-mcp-addon@[^/]+$/.test(argument)
-    ));
-  return entry?.BAS_EXT === 'true' && (entry?.command === 'sap-ai-dev-toolkit' || entry?.command === 'bas-vsp-mcp' || npxLauncher);
+    && entry.args.some(argument => commands.has(argument))
+    && entry.args.some(argument => typeof argument === 'string' && packages.some(pattern => pattern.test(argument)));
+  return entry?.BAS_EXT === 'true' && (commands.has(entry?.command) || npxLauncher);
 }
 
 function destinationValue(env) {
@@ -169,9 +227,13 @@ export async function installMcpConfig(destinationsOrOptions, options = {}) {
   const env = options.env || process.env;
   const path = options.path || await resolveMcpConfigPath(env);
   const config = await readConfig(path);
-  const generated = buildMcpEntries(destinations, env);
+  const generated = {
+    ...buildMcpEntries(destinations, env),
+    ...buildSapDevelopmentMcpEntries(options.sapDevelopmentServers || [])
+  };
   if (options.command) {
     for (const entry of Object.values(generated)) {
+      if (isCompanionServer(entry)) continue;
       entry.command = options.command;
       if (options.args?.length) entry.args = [...options.args];
     }
@@ -182,8 +244,8 @@ export async function installMcpConfig(destinationsOrOptions, options = {}) {
       && typeof destinationValue(entry?.env) === 'string'
       && (destinationSource(entry.env) === 'cloud-foundry'
         ? typeof entry.env.BAS_CF_DESTINATION_KEY === 'string'
-        : destinationSource(entry.env) === undefined);
-    if (!name.startsWith(LEGACY_MCP_SERVER_PREFIX) && !managed) servers[name] = entry;
+        : entry.env.BAS_VSP_DESTINATION_SOURCE === undefined);
+    if (!LEGACY_MCP_SERVER_PREFIXES.some(prefix => name.startsWith(prefix)) && !managed && !isCompanionServer(entry)) servers[name] = entry;
   }
   for (const name of Object.keys(generated)) {
     if (Object.hasOwn(servers, name)) {

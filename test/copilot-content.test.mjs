@@ -4,16 +4,26 @@ import { readFile, readdir, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 
 const root = process.cwd();
-const agentPath = join(root, '.github', 'agents', 'abap-developer.agent.md');
+const agentsRoot = join(root, '.github', 'agents');
+const agentPath = join(agentsRoot, 'abap-developer.agent.md');
 const skillsRoot = join(root, '.github', 'skills');
+const expectedAgents = [
+  'abap-developer.agent.md',
+  'abap-runtime-debugger.agent.md',
+  'rap-service-developer.agent.md',
+  'sap-solution-architect.agent.md'
+];
 const expectedSkills = [
   'abap-debugging',
   'abap-development',
   'abap-runtime-analysis',
   'abap-testing-quality',
   'cds-development',
+  'clean-core-extensibility',
   'rap-development',
   'rap-service-delivery',
+  'sap-sdlc-orchestration',
+  'sap-standard-api-analysis',
   'sap-transport-release'
 ];
 
@@ -55,6 +65,7 @@ function assertNoUnsafeTransportClaims(markdown, path) {
 
 test('packaged Copilot agent and skill inventory is complete and canonical', async () => {
   assert.equal((await stat(agentPath)).isFile(), true);
+  assert.deepEqual((await readdir(agentsRoot)).sort(), expectedAgents);
   const actualSkills = (await readdir(skillsRoot)).sort();
   assert.deepEqual(actualSkills, expectedSkills);
   for (const skill of expectedSkills) {
@@ -78,6 +89,26 @@ test('ABAP Developer agent has valid metadata and invokes the packaged skills', 
   assertMentionsLiveToolDiscovery(markdown, agentPath);
   assertValidationPolicy(markdown, agentPath);
   assertNoUnsafeTransportClaims(markdown, agentPath);
+});
+
+test('SAP Solution Architect agent has valid metadata and planning/handoff policy', async () => {
+  const path = join(agentsRoot, 'sap-solution-architect.agent.md');
+  const markdown = await readMarkdown(path);
+  const metadata = parseFrontmatter(markdown, path);
+  assert.deepEqual(Object.keys(metadata).sort(), ['description', 'name', 'target', 'user-invocable']);
+  assert.equal(metadata.name, 'SAP Solution Architect');
+  assert.equal(metadata.target, 'vscode');
+  assert.equal(metadata['user-invocable'], 'true');
+  assert.match(metadata.description, /standard|Clean Core|side-by-side|SDLC/i);
+  assertMentionsLiveToolDiscovery(markdown, path);
+  assert.match(markdown, /GetAPIReleaseState/i);
+  assert.match(markdown, /Clean Core/i);
+  assert.match(markdown, /side-by-side/i);
+  assert.match(markdown, /ABAP Developer/i);
+  assert.match(markdown, /RAP Service Developer/i);
+  assert.match(markdown, /ABAP Runtime Debugger/i);
+  assert.match(markdown, /SDLC|lifecycle/i);
+  assertNoUnsafeTransportClaims(markdown, path);
 });
 
 test('each skill has valid metadata, matching name, and enforceable live-tool validation policy', async () => {

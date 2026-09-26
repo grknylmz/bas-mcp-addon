@@ -56,7 +56,7 @@ test('help exits before BAS destination discovery', async t => {
   const result = await runLauncher(['--help'], { ...process.env, H2O_URL: `http://127.0.0.1:${server.address().port}`, NO_PROXY: '127.0.0.1' });
   assert.equal(result.code, 0, result.stderr);
   assert.equal(result.stderr, '');
-  assert.match(result.stdout, /Usage: sap-ai-dev-toolkit/);
+  assert.match(result.stdout, /Usage: sap-ai-dev/);
   assert.match(result.stdout, /Use an MCP client to call server tools/);
   assert.equal(requests, 0);
 });
@@ -179,8 +179,8 @@ test('setup subprocess writes one isolated MCP entry per selected destination', 
     assert.equal(generated.every(([, entry]) => entry.env.H2O_URL === env.H2O_URL), true);
     const packageJson = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
     assert.deepEqual(generated.map(([, entry]) => [entry.command, entry.args]), [
-      ['npx', ['--yes', '--ignore-scripts', `--package=sap-ai-dev-toolkit@${packageJson.version}`, 'sap-ai-dev-toolkit']],
-      ['npx', ['--yes', '--ignore-scripts', `--package=sap-ai-dev-toolkit@${packageJson.version}`, 'sap-ai-dev-toolkit']]
+      ['npx', ['--yes', '--ignore-scripts', `--package=sap-ai-dev-toolkit@${packageJson.version}`, 'sap-ai-dev']],
+      ['npx', ['--yes', '--ignore-scripts', `--package=sap-ai-dev-toolkit@${packageJson.version}`, 'sap-ai-dev']]
     ]);
     const second = await runLauncherTty(env, '\r', ['--setup', '--npx']);
     assert.equal(second.code, 0, `${second.stdout}\\n${second.stderr}`);

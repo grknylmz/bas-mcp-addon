@@ -1,4 +1,4 @@
-<h1 align="center">🧭 SAP AI Dev Toolkit</h1>
+<h1 align="center">🧭 SAP AI Development Toolkit</h1>
 
 <p align="center">
   <strong>Build, test, and deliver ABAP with AI that understands your SAP landscape.</strong><br>
@@ -48,7 +48,13 @@ flowchart LR
 
 ```sh
 npm install --global sap-ai-dev-toolkit
-sap-ai-dev-toolkit --setup
+sap-ai-dev --setup
+```
+
+To also add optional full-stack SAP companion MCP servers for Fiori, UI5, CAP, and browser validation, run:
+
+```sh
+sap-ai-dev --setup --tools
 ```
 
 Then connect a destination in SAP Business Application Studio:
@@ -56,7 +62,7 @@ Then connect a destination in SAP Business Application Studio:
 1. Open the Command Palette.
 2. Run **MCP: List Servers**.
 3. Start the server named after your selected BAS destination.
-4. In GitHub Copilot Chat, choose the best-fit bundled agent from the agent picker: **ABAP Developer**, **ABAP Runtime Debugger**, or **RAP Service Developer**.
+4. In GitHub Copilot Chat, choose the best-fit bundled agent from the agent picker: **SAP Solution Architect**, **ABAP Developer**, **ABAP Runtime Debugger**, or **RAP Service Developer**.
 5. In the Chat tools picker, enable the server for that BAS destination.
 6. Ask Copilot to inspect, build, test, or verify something in your SAP landscape.
 
@@ -64,21 +70,22 @@ Then connect a destination in SAP Business Application Studio:
 
 ## 🤖 Available agents and skills
 
-**Agents:** Three user-invocable custom agents are included. Select the best fit from the agent picker in GitHub Copilot Chat, as shown in Quick start.
+**Agents:** Four user-invocable custom agents are included. Select the best fit from the agent picker in GitHub Copilot Chat, as shown in Quick start.
 
 | | Agent | Best for |
 | --- | --- | --- |
+| 🧭 | **SAP Solution Architect** | System investigation, SAP standard/API recommendations, Clean Core and side-by-side design, and SDLC orchestration through implementation handoffs and validation gates |
 | 🧑‍💻 | **ABAP Developer** | General ABAP, CDS, and RAP implementation, validation, and transport-preparation tasks |
 | 🐞 | **ABAP Runtime Debugger** | Runtime incidents, dumps, logs, traces, debugger sessions, call graphs, and performance symptoms |
 | 🚀 | **RAP Service Developer** | RAP business objects, behavior implementations, projections, service definitions, service bindings, and OData validation |
 
-**Included skills:** `abap-development` · `abap-testing-quality` · `cds-development` · `rap-development` · `abap-debugging` · `abap-runtime-analysis` · `rap-service-delivery` · `sap-transport-release`
+**Included skills:** `abap-development` · `abap-testing-quality` · `cds-development` · `rap-development` · `abap-debugging` · `abap-runtime-analysis` · `rap-service-delivery` · `sap-standard-api-analysis` · `clean-core-extensibility` · `sap-sdlc-orchestration` · `sap-transport-release`
 
 If the agents are not listed, install the optional agents and skills under `$HOME/.copilot` when prompted during an interactive global install, then reload BAS if needed. Repository-scoped installation instructions appear below.
 
 ## ✨ Your SAP development cockpit, inside Copilot Chat
 
-Connect Copilot to the destinations you choose, then work in plain language. The bundled agents combine repository exploration, SAP ADT operations, and validation tools into one guided workflow.
+`sap-ai-dev-toolkit` installs `sap-ai-dev`, discovers your BAS destinations, and exposes a curated SAP development toolset through MCP. Instead of manually switching between chat, terminal commands, repository searches, ADT screens, and SAP checks, describe the outcome you want and let the appropriate bundled agent coordinate the available tools.
 
 <p align="center"><strong>💬 Request → 🔎 Inspect → 🧠 Reason → 🧑‍💻 Implement → 🧪 Verify → 📋 Report</strong></p>
 
@@ -143,9 +150,9 @@ The catalog below covers source inspection, data, editing, quality, transports, 
 - Read SLG1 application logs
 - Review and create transport requests
 
-## 🧠 Three agents, eight focused skills
+## 🧠 Four agents, eleven focused skills
 
-The package ships with three custom agents plus eight task-focused Copilot Agent Skills:
+The package ships with four custom agents plus eleven task-focused Copilot Agent Skills:
 
 | | Skill | Best for |
 | --- | --- | --- |
@@ -153,6 +160,9 @@ The package ships with three custom agents plus eight task-focused Copilot Agent
 | ✅ | `abap-testing-quality` | ABAP Unit, lint, LSP diagnostics, SAP syntax checks, and ATC |
 | 🧩 | `cds-development` | CDS modeling, dependency inspection, and consumer impact analysis |
 | 🚀 | `rap-development` | RAP business objects and service development |
+| 🧭 | `sap-standard-api-analysis` | SAP standard capability, released API, CDS/RAP/OData, and fit-gap analysis before custom development |
+| 🧱 | `clean-core-extensibility` | Clean Core, released extensibility, and side-by-side extension design with risk classification |
+| 🔁 | `sap-sdlc-orchestration` | Requirement-to-release lifecycle planning, delegated implementation, quality gates, validation, and handover |
 | 🐞 | `abap-debugging` | Dumps, logs, traces, and runtime failure diagnosis |
 | 🔬 | `abap-runtime-analysis` | Incident triage, traces, debugger state, call graphs, and performance analysis |
 | 🚀 | `rap-service-delivery` | RAP service activation, publication, OData validation, and end-to-end runtime checks |
@@ -161,6 +171,29 @@ The package ships with three custom agents plus eight task-focused Copilot Agent
 ## 🗺️ How it fits together
 
 Each selected BAS destination becomes its own isolated MCP server identity. The MCP client discovers the live tools and schemas, the add-on routes calls to the correct VSP child, and VSP reaches SAP ADT through the selected BAS destination.
+
+## 🧰 Optional full-stack companion MCP servers
+
+ABAP/RAP backend access is provided by this add-on's BAS/VSP proxy. For end-to-end SAP development, setup can also add managed companion MCP entries for frontend, CAP, and browser validation work:
+
+```sh
+sap-ai-dev --setup --tools
+```
+
+The companion entries are optional and are launched through `npx` only when the MCP client starts them. They are marked as managed by `sap-ai-dev-toolkit`, so rerunning setup can update or remove them without touching unrelated MCP servers.
+
+| MCP entry | Package | Launches | Use when the agent needs to |
+| --- | --- | --- | --- |
+| `sap-fiori-tools` | `@sap-ux/fiori-mcp-server` | `fiori-mcp` | Generate or adapt Fiori elements/freestyle apps, annotations, and SAP Fiori UX artifacts |
+| `ui5-tools` | `@ui5/mcp-server` | `ui5mcp` | Inspect SAPUI5/OpenUI5 projects, manifests, routing, views, controllers, and UI5-specific issues |
+| `cap-tools` | `@cap-js/mcp-server` | `cds-mcp` | Inspect CAP CDS models, services, entities, actions, and local CAP application structure |
+| `browser-validation` | `@playwright/mcp` | `playwright-mcp` | Open BAS previews, smoke-test Fiori/UI flows, collect screenshots, and verify browser runtime behavior |
+
+Recommended profiles:
+
+- **RAP + Fiori:** select your BAS destination plus `sap-fiori-tools`, `ui5-tools`, and `browser-validation`.
+- **CAP on BTP:** select `cap-tools`, `sap-fiori-tools`, `ui5-tools`, and `browser-validation`.
+- **UI-only:** select `sap-fiori-tools`, `ui5-tools`, and optionally `browser-validation`.
 
 ## 💡 Example requests
 
@@ -198,6 +231,23 @@ Install globally from a BAS dev space:
 npm install --global sap-ai-dev-toolkit
 ```
 
+If you previously installed the old package, remove it first because the legacy `bas-vsp-mcp` command is no longer shipped:
+
+```sh
+npm uninstall --global bas-mcp-addon
+npm install --global sap-ai-dev-toolkit
+sap-ai-dev --setup
+```
+
+The guided setup can also offer companion MCP entries with `sap-ai-dev --setup --tools`:
+
+| Server | npm package | Best for |
+| --- | --- | --- |
+| SAP Fiori tools | `@sap-ux/fiori-mcp-server` | Fiori elements/freestyle apps, annotations, and UX guidance |
+| UI5 tools | `@ui5/mcp-server` | SAPUI5/OpenUI5 project inspection, help, and lint/project support |
+| CAP tools | `@cap-js/mcp-server` | CAP CDS/service model inspection and CAP app development |
+| Browser validation | `@playwright/mcp` | Fiori/UI smoke tests, screenshots, and browser runtime validation |
+
 The installer handles two setup tasks automatically:
 
 - Looks for Go in `GO_BINARY`, `PATH`, or the package-local Go installation. If none is available, it downloads and installs the pinned supported Go release without prompting.
@@ -209,18 +259,18 @@ Some current npm versions also require install hooks to be approved. If npm repo
 
 The setup report uses icons and terminal colors; set `NO_COLOR=1` to disable ANSI colors. The table is a weather report, not a bouncer: green **PASS** means the ADT probe responded, red **FAIL** means it failed, and yellow **SKIPPED** means it was skipped. Probe failures do not block MCP registration or startup for destinations you select.
 
-Run `sap-ai-dev-toolkit --setup` later to change the selection or remove generated entries. Use `--npx` to make the generated entries start the pinned package through npm instead of relying on a global `sap-ai-dev-toolkit` command.
+Run `sap-ai-dev --setup` later to change the destination selection or remove generated destination entries. Run `sap-ai-dev --setup --tools` to also choose optional companion tools. Use `--npx` to make generated BAS/VSP destination entries start the pinned package through npm instead of relying on a global `sap-ai-dev` command; companion tools already use `npx` with their own npm packages.
 
 If a setup step is skipped or fails, rerun it from an interactive BAS terminal:
 
 ```sh
-sap-ai-dev-toolkit --setup
+sap-ai-dev --setup
 ```
 
 To configure without a global install, run the guided setup directly through npm:
 
 ```sh
-npx --yes --ignore-scripts --package=sap-ai-dev-toolkit sap-ai-dev-toolkit --setup --npx
+npx --yes --ignore-scripts --package=sap-ai-dev-toolkit sap-ai-dev --setup --npx
 ```
 
 This lists discovered systems in the same checkbox picker, with nothing selected by default. Use **Space** to choose destinations, **Enter** to confirm, and **a** to toggle all (select all if any are unchecked; otherwise clear the selection). It writes MCP entries that launch the selected servers through npx. The entries pin the package version used during setup, and `--ignore-scripts` avoids running the install-time wizard a second time. After setup, in BAS run **MCP: List Servers**, select each chosen destination, and choose **Start Server**.
@@ -228,7 +278,7 @@ This lists discovered systems in the same checkbox picker, with nothing selected
 For a non-interactive installation or a platform without a published VSP asset, provide a trusted binary override:
 
 ```sh
-SAP_AI_DEV_TOOLKIT_BINARY=/path/to/vsp npm install --global sap-ai-dev-toolkit
+BAS_VSP_BINARY=/path/to/vsp npm install --global sap-ai-dev-toolkit
 ```
 
 At the end of a global install, the color-coded summary shows the MCP config path, each generated entry name, destination/client/authentication, launch command, and environment key names (not values). The installer does not open an editor automatically; in BAS/VS Code:
@@ -242,16 +292,17 @@ At the end of a global install, the color-coded summary shows the MCP config pat
 
 ## 🤖 GitHub Copilot ABAP agents and skills
 
-The package includes three user-invocable custom agents (**ABAP Developer**, **ABAP Runtime Debugger**, and **RAP Service Developer**) and eight task-focused Agent Skills for GitHub Copilot in BAS.
+The package includes four user-invocable custom agents (**SAP Solution Architect**, **ABAP Developer**, **ABAP Runtime Debugger**, and **RAP Service Developer**) and eleven task-focused Agent Skills for GitHub Copilot in BAS.
 
-### 🧠 How the primary ABAP Developer agent works
+### 🧠 How the SAP Solution Architect and ABAP Developer agents work
 
-1. **Understand the request.** Establish the expected behavior and, for SAP changes, the destination, package, and transport or temporary target. Ask only when a material detail is missing.
-2. **Inspect before editing.** Read relevant source, tests, callers, dependencies, and conventions; query the active MCP server's live `tools/list` and use its exact destination-prefixed tools and schemas.
-3. **Implement with behavior in mind.** Add or refine an ABAP Unit assertion first when an executable regression test is available, then make the smallest change that meets the request.
-4. **Verify with available checks.** Use `LintABAP` for caller-supplied source, BAS editor LSP diagnostics when configured, and SAP `SyntaxCheck`, `RunUnitTests`, and `RunATCCheck` when exposed and relevant. Lint and syntax checks do not replace behavior tests.
-5. **Protect SAP state.** Only make requested changes. Activate objects or publish services only when asked; create transports only when explicitly authorized. Release and deletion of transports are unavailable through this add-on.
-6. **Report observed results.** Summarize changed objects and actual validation, activation, or publication outcomes. Identify skipped checks and exact blockers; never claim a check passed if it did not run.
+1. **Start with architecture when requirements are open-ended.** Use **SAP Solution Architect** to investigate the SAP system, evaluate SAP standard solutions, recommend released APIs, apply Clean Core and side-by-side extensibility, create the solution design, and orchestrate the SDLC through implementation work packages and validation gates.
+2. **Understand the request.** Establish the expected behavior and, for SAP changes, the destination, package, and transport or temporary target. Ask only when a material detail is missing.
+3. **Inspect before editing.** Read relevant source, tests, callers, dependencies, standard APIs, release state, and conventions; query the active MCP server's live `tools/list` and use its exact destination-prefixed tools and schemas.
+4. **Implement with behavior in mind.** Add or refine an ABAP Unit assertion first when an executable regression test is available, then make the smallest change that meets the request.
+5. **Verify with available checks.** Use `LintABAP` for caller-supplied source, BAS editor LSP diagnostics when configured, and SAP `SyntaxCheck`, `RunUnitTests`, and `RunATCCheck` when exposed and relevant. Lint and syntax checks do not replace behavior tests.
+6. **Protect SAP state.** Only make requested changes. Activate objects or publish services only when asked; create transports only when explicitly authorized. Release and deletion of transports are unavailable through this add-on.
+7. **Report observed results.** Summarize architecture decisions, changed objects, implementation handoff or actual validation, activation, and publication outcomes. Identify skipped checks and exact blockers; never claim a check passed if it did not run.
 
 ### 🧩 Included Agent Skills
 
@@ -261,6 +312,9 @@ The package includes three user-invocable custom agents (**ABAP Developer**, **A
 | ✅ | `abap-testing-quality` | ABAP Unit behavior tests, lint, LSP diagnostics, syntax checks, and ATC. |
 | 🧩 | `cds-development` | Model CDS definitions and inspect dependencies and consumers. |
 | 🚀 | `rap-development` | Build RAP business objects and services; publish only when requested. |
+| 🧭 | `sap-standard-api-analysis` | Assess SAP standard capabilities, released APIs, CDS/RAP/OData options, and fit-gap before custom code. |
+| 🧱 | `clean-core-extensibility` | Design Clean Core compliant in-app, developer, API/event, and side-by-side extension patterns. |
+| 🔁 | `sap-sdlc-orchestration` | Orchestrate discovery, design, implementation handoffs, quality gates, transport readiness, and handover. |
 | 🐞 | `abap-debugging` | Diagnose dumps, application logs, traces, and runtime failures. |
 | 🔬 | `abap-runtime-analysis` | Analyze incidents, traces, debugger state, call graphs, and performance symptoms. |
 | 🚀 | `rap-service-delivery` | Validate RAP service bindings, activation, publication, and end-to-end OData behavior. |
@@ -268,7 +322,7 @@ The package includes three user-invocable custom agents (**ABAP Developer**, **A
 
 ### 📥 Install for your BAS user
 
-After destination setup, the installer prints a 🤖 notice that it is waiting for confirmation, then offers to install the bundled agents and all eight skills under `$HOME/.copilot`. Press **Enter** to install; type **n** then **Enter** to skip. Declining leaves those files unchanged.
+After destination setup, the installer prints a 🤖 notice that it is waiting for confirmation, then offers to install the bundled agents and all eleven skills under `$HOME/.copilot`. Press **Enter** to install; type **n** then **Enter** to skip. Declining leaves those files unchanged.
 
 These user-level customizations are available across workspaces opened by the same BAS user in the same dev space. Copilot must be available in BAS and may need a window reload to discover new files. A non-interactive install skips the optional prompt; `npm install --ignore-scripts` skips the postinstall wizard entirely.
 
@@ -291,14 +345,14 @@ Review skipped or conflicting files and merge changes manually. `LintABAP` analy
 
 ## 🧭 SAP AI Dev Toolkit setup in BAS
 
-`sap-ai-dev-toolkit --setup` reads BAS destination names from `H2O_URL/api/listDestinations`, then gives each destination's `/sap/bc/adt/discovery` endpoint a quick knock through the BAS proxy. HTTP 2xx, 401, and 403 count as reachable; other responses and network failures are reported but do not exclude discovered destinations from the selection list or prevent startup when selected.
+`sap-ai-dev --setup` reads BAS destination names from `H2O_URL/api/listDestinations`, then gives each destination's `/sap/bc/adt/discovery` endpoint a quick knock through the BAS proxy. HTTP 2xx, 401, and 403 count as reachable; other responses and network failures are reported but do not exclude discovered destinations from the selection list or prevent startup when selected.
 
 If the `cf` CLI is version 8.18 or newer and authenticated to a targeted space, setup offers an opt-in import from that space's SAP Destination service. It does not create service keys unless you accept. The imported records are limited to the current space and are merged with BAS destinations for selection. OnPremise destinations require choosing a Connectivity service instance; runtime traffic uses that service's proxy, and PrincipalPropagation uses the current CF user's token. Internet destinations use the configured HTTP(S) proxy environment. Setup stores only service-instance/key references in `mcp.json`, not the service-key credentials. At runtime the generated entry verifies the active CF space and resolves those references. Setup removes an add-on-created key only when no remaining CF entry references it and the CLI is targeted to the key's recorded space; keys are left untouched when the space cannot be verified.
 Cloud Foundry HTTP destination probes use forward-form HTTP requests, not CONNECT tunnels; SAP Connectivity requires HTTP from the application to its proxy. OnPremise requests are canceled when the client disconnects or the runtime route closes.
 
-Interactive npm install and `sap-ai-dev-toolkit --setup` both use a checkbox picker with no destinations selected by default. Use **Space** to choose destinations, **Enter** to confirm, and **a** to toggle all (select all if any are unchecked; otherwise clear the selection). Confirming with none checked removes this package's generated MCP entries. Non-interactive installs skip destination selection without changing MCP config. Run the interactive setup command above; add `--npx` when the package is not installed globally.
+Interactive npm install and `sap-ai-dev --setup` both use a checkbox picker with no destinations selected by default. Use **Space** to choose destinations, **Enter** to confirm, and **a** to toggle all (select all if any are unchecked; otherwise clear the selection). Confirming with none checked removes this package's generated MCP entries. Non-interactive installs skip destination selection without changing MCP config. Run the interactive setup command above; add `--npx` when the package is not installed globally.
 
-Setup tidies its own footprint: it reconciles MCP entries managed by SAP AI Dev Toolkit and removes legacy generated entries from earlier releases. Existing unrelated MCP servers and top-level configuration such as `inputs` stay untouched.
+Setup tidies its own footprint: it reconciles MCP entries managed by this package and removes legacy `sapAiDev_*` / `basVspMcp_*` entries from earlier releases. Existing unrelated MCP servers and top-level configuration such as `inputs` stay untouched.
 
 ### 🌐 BAS destination example
 
@@ -357,7 +411,7 @@ One selected system, one isolated stdio MCP entry. Here's the shape:
 ```json
 {
   "type": "stdio",
-  "command": "sap-ai-dev-toolkit",
+  "command": "sap-ai-dev",
   "env": {
     "H2O_URL": "https://bas.example.com",
     "SAP_AI_DEV_TOOLKIT_DESTINATION": "DEMO_ABAP",
@@ -367,7 +421,7 @@ One selected system, one isolated stdio MCP entry. Here's the shape:
 }
 ```
 
-The MCP protocol `serverInfo.name` matches `SAP_AI_DEV_TOOLKIT_DESTINATION`, so each wizard-generated destination has its own identity instead of the shared `sap-ai-dev-toolkit` name.
+The MCP protocol `serverInfo.name` matches `BAS_VSP_DESTINATION`, so each wizard-generated destination has its own identity instead of the shared `sap-ai-dev-toolkit` name.
 
 Credentials, cookies, SAP usernames, passwords, and raw BAS destination payloads are not written to the MCP configuration.
 
@@ -375,14 +429,15 @@ Credentials, cookies, SAP usernames, passwords, and raw BAS destination payloads
 
 The configuration path is selected in this order:
 
-1. `SAP_AI_DEV_TOOLKIT_MCP_CONFIG`, when set.
-2. An existing MCP user configuration detected automatically.
-3. The default MCP user configuration location.
+1. `SAP_AI_DEV_MCP_CONFIG`, when set.
+2. `BAS_VSP_MCP_CONFIG`, when set for compatibility with earlier releases.
+3. An existing MCP user configuration detected automatically.
+4. The default MCP user configuration location.
 
-Set `SAP_AI_DEV_TOOLKIT_MCP_CONFIG` to use a specific configuration file:
+Set `SAP_AI_DEV_MCP_CONFIG` to use a specific configuration file:
 
 ```sh
-SAP_AI_DEV_TOOLKIT_MCP_CONFIG="/path/to/mcp.json" sap-ai-dev-toolkit --setup
+SAP_AI_DEV_MCP_CONFIG="/path/to/mcp.json" sap-ai-dev --setup
 ```
 
 The file must be strict JSON with an object-valued `servers` property. Existing malformed or incompatible files are rejected without overwriting them.
@@ -391,14 +446,11 @@ The file must be strict JSON with an object-valued `servers` property. Existing 
 
 | Need | Command |
 | --- | --- |
-| See options without starting the MCP server | `sap-ai-dev-toolkit --help` |
-| Walk through setup interactively | `sap-ai-dev-toolkit --setup` |
-| See discovered systems and probe results | `sap-ai-dev-toolkit --list-destinations` |
-| Get the same report in machine-readable, redacted form | `sap-ai-dev-toolkit --list-destinations --json` |
-| Check availability without starting the server | `sap-ai-dev-toolkit --check` |
-| Diagnose the destination through VSP, SAP, and MCP | `sap-ai-dev-toolkit --doctor` |
-| Print machine-readable diagnostics | `sap-ai-dev-toolkit --doctor --json` |
-| Start the isolated offline playground | `sap-ai-dev-toolkit --demo` |
+| See options without starting the MCP server | `sap-ai-dev --help` |
+| Walk through setup interactively | `sap-ai-dev --setup` |
+| See discovered systems and probe results | `sap-ai-dev --list-destinations` |
+| Get the same report in machine-readable, redacted form | `sap-ai-dev --list-destinations --json` |
+| Check availability without starting the server | `sap-ai-dev --check` |
 
 With `H2O_URL` set, the normal command starts the MCP proxy. Each generated entry supplies one `SAP_AI_DEV_TOOLKIT_DESTINATION`, so each server stays in its own lane and exposes only its selected SAP system.
 
@@ -408,7 +460,7 @@ Without `H2O_URL`, the command passes arguments directly to the installed VSP bi
 
 ### 🔄 How an MCP tool call reaches SAP
 
-`sap-ai-dev-toolkit` is an MCP stdio server and destination router, not a terminal command for individual SAP operations. No shell incantations needed: your MCP client discovers the tools, picks one for the chat request, and sends the call over stdio.
+`sap-ai-dev` is an MCP stdio server and destination router, not a terminal command for individual SAP operations. No shell incantations needed: your MCP client discovers the tools, picks one for the chat request, and sends the call over stdio.
 
 Each generated MCP server entry uses its BAS destination name verbatim: `DEMO_ABAP` stays `DEMO_ABAP`. Tool names use the normalized destination slug instead, so the prefix is `demo-abap` (`demo-abap__GetSource`, `demo-abap__RunQuery`, `demo-abap__LintABAP`). Use the exact names shown by your MCP client; punctuation can change during slugification.
 
@@ -602,10 +654,10 @@ The MCP client discovers the schemas; callers do not need to memorize every argu
 
 | What to inspect | How |
 | --- | --- |
-| Add-on command options | `sap-ai-dev-toolkit --help` |
-| BAS destinations and probe status | `sap-ai-dev-toolkit --list-destinations --json` |
-| Destination availability only | `sap-ai-dev-toolkit --check` |
-| Generated server names and destination mapping | **MCP: Open User Configuration**; look for entries named after the BAS destination and `SAP_AI_DEV_TOOLKIT_DESTINATION`. |
+| Add-on command options | `sap-ai-dev --help` |
+| BAS destinations and probe status | `sap-ai-dev --list-destinations --json` |
+| Destination availability only | `sap-ai-dev --check` |
+| Generated server names and destination mapping | **MCP: Open User Configuration**; look for entries named after the BAS destination and `BAS_VSP_DESTINATION`. |
 | Running server | **MCP: List Servers**; select the server and choose **Start Server**. |
 | Tools and exact schemas | Expand that server in the Chat tools picker. At the protocol level, MCP clients request `tools/list`, whose entries include `name`, `description`, and `inputSchema`. |
 | Runtime and tool-call logs | Select the MCP server in the Output view. Startup, call lifecycle, and child stderr logs are written to stderr; child MCP log notifications are forwarded to the client. Tool arguments and result contents are not logged. |
@@ -645,10 +697,11 @@ The response contains a `tools` array. A `RunQuery` entry resembles this excerpt
 | `SAP_AI_DEV_TOOLKIT_DESTINATION` | Comma-separated destination allowlist for normal runtime discovery. Setup clears this temporarily so it can display all eligible systems. |
 | `SAP_AI_DEV_TOOLKIT_MODE` | VSP child mode (`expert` by default; `focused` omits `ActivateMultiple`, `GetUserTransports`, and `GetTransportInfo`). The proxy exposes its curated tools plus tools listed in `tools.md` when registered by that mode, including local `LintABAP`. |
 | `SAP_ALLOW_TRANSPORTABLE_EDITS` | Generated MCP entries set this to `true` to permit source edits in transportable packages; VSP safety checks and SAP authorizations still apply. |
-| `SAP_AI_DEV_TOOLKIT_MCP_CONFIG` | Explicit MCP user configuration path. |
-| `SAP_AI_DEV_TOOLKIT_BINARY` | Trusted prebuilt VSP executable; skips Go and binary provisioning. |
-| `SAP_AI_DEV_TOOLKIT_BINARY_URL` | Alternate VSP binary download URL. |
-| `SAP_AI_DEV_TOOLKIT_CACHE_DIR` | Binary cache directory. |
+| `SAP_AI_DEV_MCP_CONFIG` | Explicit MCP user configuration path. |
+| `BAS_VSP_MCP_CONFIG` | Backward-compatible alias for the MCP user configuration path. |
+| `BAS_VSP_BINARY` | Trusted prebuilt VSP executable; skips Go and binary provisioning. |
+| `BAS_VSP_BINARY_URL` | Alternate VSP binary download URL. |
+| `BAS_VSP_CACHE_DIR` | Binary cache directory. |
 | `GO_BINARY` | Explicit Go executable used for provisioning when automatic Go installation is unavailable. |
 | `SAP_AI_DEV_TOOLKIT_SKIP_PROBE=true` | Skip destination probes; useful for controlled diagnostics or fixtures. |
 | `HTTP_PROXY` / `HTTPS_PROXY` | BAS proxy settings used for destination-list requests, destination probing, and child processes. |
@@ -664,7 +717,7 @@ No systems on the list? Start at BAS's front door and check the destination name
 
 ```sh
 curl "$H2O_URL/api/listDestinations"
-sap-ai-dev-toolkit --list-destinations --json
+sap-ai-dev --list-destinations --json
 ```
 
 Next, check that the backend answers at `/sap/bc/adt`.
@@ -681,7 +734,7 @@ Run the built-in Node.js test suite:
 npm test
 ```
 
-The package source is hosted in the [GitHub repository](https://github.com/grknylmz/sap-ai-dev-toolkit).
+The package repository is [grknylmz/sap-ai-dev-toolkit](https://github.com/grknylmz/sap-ai-dev-toolkit).
 
 ## 🚀 Publishing to npm
 
@@ -699,7 +752,7 @@ The token is not printed or stored in the repository.
 
 ## 📄 Acknowledgements and licenses
 
-The SAP AI Dev Toolkit code and project changes are copyright (c) 2026 Gurkan Yilmaz and released under the MIT License. Everyone may use, copy, modify, distribute, sublicense, and sell copies, provided the copyright and license notices are retained; the software is provided without warranty. See `LICENSE`. Bundled VSP and third-party components retain their own licenses and notices in `NOTICE` and `LICENSE-APACHE-2.0.txt`.
+The original SAP AI Development Toolkit code and project changes are copyright (c) 2026 Gurkan Yilmaz and released under the MIT License. Everyone may use, copy, modify, distribute, sublicense, and sell copies, provided the copyright and license notices are retained; the software is provided without warranty. See `LICENSE`. Bundled VSP and third-party components retain their own licenses and notices in `NOTICE` and `LICENSE-APACHE-2.0.txt`.
 
 This add-on bundles patched binaries from Vibing Steampunk (VSP), created by Alice Vinogradova and contributors. The binaries are built from upstream commit `9886d27`; this repository's BAS proxy-auth patch is in `patches/vsp-bas-proxy-auth.patch`.
 

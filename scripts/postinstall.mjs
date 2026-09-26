@@ -76,9 +76,9 @@ async function runCopilotAssetInstall() {
     await announce([
       'Optional Copilot setup is waiting for your choice.',
       '',
-      'Press Enter to install the ABAP Developer agent and bundled skills in the path shown below; type n then press Enter to skip.',
+      'Press Enter to install the bundled agents and eleven skills in the path shown below; type n then press Enter to skip.',
       '',
-      `${colorText('✅ Press Enter', 'green', true)} to install the ABAP Developer agent and bundled skills.`,
+      `${colorText('✅ Press Enter', 'green', true)} to install the bundled agents and eleven skills.`,
       `${colorText('⏭️  Type n then Enter', 'yellow', true)} to skip this optional step.`,
       '',
       `${colorText('📁 Target folder:', 'cyan', true)}`,
@@ -88,7 +88,7 @@ async function runCopilotAssetInstall() {
     const prompt = createInterface({ input: terminal.input, output: terminal.output });
     let answer;
     try {
-      answer = await prompt.question(`${colorText('🤖 Install the ABAP Developer agent and bundled skills?', 'magenta', terminal.output)} ${colorText('[Y/n]', 'yellow', terminal.output)} `);
+      answer = await prompt.question(`${colorText('🤖 Install the bundled agents and eleven skills?', 'magenta', terminal.output)} ${colorText('[Y/n]', 'yellow', terminal.output)} `);
     } finally {
       prompt.close();
     }
@@ -151,16 +151,16 @@ export function destinationTable(destinations, registeredNames) {
 }
 async function announceSetup(result) {
   if (result?.reason === 'non-bas') {
-    await announce('BAS destination setup was skipped because H2O_URL is not set.\nMCP config was not changed.\nRun sap-ai-dev-toolkit --setup from a BAS dev space when you are ready.', 'info');
+    await announce('BAS destination setup was skipped because H2O_URL is not set.\nMCP config was not changed.\nRun sap-ai-dev --setup from a BAS dev space when you are ready.', 'info');
     return;
   }
   if (result?.reason === 'non-tty') {
-    await announce('Destination selection was skipped because npm did not provide an interactive terminal.\nMCP config was not changed.\nRun sap-ai-dev-toolkit --setup from an interactive BAS terminal, or run npx --yes --ignore-scripts --package=sap-ai-dev-toolkit sap-ai-dev-toolkit --setup --npx.', 'warning');
+    await announce('Destination selection was skipped because npm did not provide an interactive terminal.\nMCP config was not changed.\nRun sap-ai-dev --setup from an interactive BAS terminal, or run npx --yes --ignore-scripts --package=sap-ai-dev-toolkit sap-ai-dev --setup --npx.', 'warning');
     return;
   }
   if (result?.reason === 'no-destinations') {
     const details = (result.warnings || []).map(warning => `• ${warning}`).join('\n');
-    await announce(`No selectable BAS or Cloud Foundry destinations were found; MCP config was not changed.\nRun sap-ai-dev-toolkit --setup to retry.${details ? `\n${details}` : ''}`, 'warning');
+    await announce(`No selectable BAS or Cloud Foundry destinations were found; MCP config was not changed.\nRun sap-ai-dev --setup to retry.${details ? `\n${details}` : ''}`, 'warning');
     return;
   }
 
@@ -171,7 +171,7 @@ async function announceSetup(result) {
       'No MCP server entries are configured for this add-on.',
       `MCP config file: ${path}`,
       'No destinations were selected, so previously managed entries were removed. Other servers and settings were preserved.',
-      'Run sap-ai-dev-toolkit --setup to choose destinations later.'
+      'Run sap-ai-dev --setup to choose destinations later.'
     ].join('\n'), 'info');
     return;
   }
@@ -250,8 +250,8 @@ async function main() {
     setupResult = await runInstallSetup();
     setupCompleted = true;
   } catch (error) {
-    await announce(`SAP AI Dev Toolkit setup failed: ${error.message}`, 'error');
-    await announce('Rerun sap-ai-dev-toolkit --setup.', 'info');
+    await announce(`BAS MCP setup failed: ${error.message}`, 'error');
+    await announce('Rerun sap-ai-dev --setup.', 'info');
   }
 
   try {

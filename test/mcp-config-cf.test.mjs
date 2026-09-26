@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { buildMcpEntries, collectCloudFoundryKeyReferencesFromAllEntries, collectManagedCloudFoundryKeyReferences, installMcpConfig, readMcpConfig } from '../src/mcp-config.mjs';
+import { buildMcpEntries, buildSapDevelopmentMcpEntries, collectCloudFoundryKeyReferencesFromAllEntries, collectManagedCloudFoundryKeyReferences, installMcpConfig, readMcpConfig } from '../src/mcp-config.mjs';
 
 const bas = {
   source: 'bas', name: 'shared', serverName: 'shared', url: 'http://shared.dest',
@@ -68,7 +68,7 @@ test('extracts key references only from package-managed Cloud Foundry entries', 
   const managedNpx = {
     ...cloudFoundry,
     command: 'npx',
-    args: ['--yes', '--package=sap-ai-dev-toolkit@0.1.0', 'sap-ai-dev-toolkit']
+    args: ['--yes', '--package=sap-ai-dev-toolkit@0.1.0', 'sap-ai-dev']
   };
   const config = { servers: {
     first: cloudFoundry,
@@ -91,6 +91,35 @@ test('extracts key references only from package-managed Cloud Foundry entries', 
   ]);
 });
 
+test('builds SAP development companion MCP entries', () => {
+  const entries = buildSapDevelopmentMcpEntries(['sap-fiori-tools', 'ui5-tools']);
+  assert.deepEqual(Object.keys(entries), ['sap-fiori-tools', 'ui5-tools']);
+  assert.deepEqual(entries['sap-fiori-tools'].args, ['--yes', '--package=@sap-ux/fiori-mcp-server', 'fiori-mcp']);
+  assert.equal(entries['ui5-tools'].command, 'npx');
+  assert.equal(entries['ui5-tools'].BAS_EXT_KIND, 'sap-development-companion');
+  assert.throws(() => buildSapDevelopmentMcpEntries(['missing-tool']), /Unknown SAP development MCP server id/);
+});
+
+test('installs and removes SAP development companion entries', async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'bas-mcp-tools-config-'));
+  const path = join(directory, 'mcp.json');
+  await writeFile(path, JSON.stringify({ servers: { userServer: { type: 'stdio', command: 'custom-server' } } }));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+
+  const result = await installMcpConfig([], {
+    env: { H2O_URL: 'http://h2o.example' },
+    path,
+    sapDevelopmentServers: ['sap-fiori-tools', 'cap-tools']
+  });
+  assert.deepEqual(Object.keys(result.servers).sort(), ['cap-tools', 'sap-fiori-tools']);
+  const written = await readMcpConfig(path);
+  assert.deepEqual(Object.keys(written.servers).sort(), ['cap-tools', 'sap-fiori-tools', 'userServer']);
+
+  await installMcpConfig([], { env: { H2O_URL: 'http://h2o.example' }, path });
+  const cleared = await readMcpConfig(path);
+  assert.deepEqual(Object.keys(cleared.servers), ['userServer']);
+});
+
 test('installs and removes CF entries without deleting unrelated MCP servers', async t => {
   const directory = await mkdtemp(join(tmpdir(), 'bas-mcp-cf-config-'));
   const path = join(directory, 'mcp.json');
@@ -104,7 +133,7 @@ test('installs and removes CF entries without deleting unrelated MCP servers', a
     env: { H2O_URL: 'http://h2o.example' },
     path,
     command: 'npx',
-    args: ['--yes', '--package=sap-ai-dev-toolkit@0.1.0', 'sap-ai-dev-toolkit']
+    args: ['--yes', '--package=sap-ai-dev-toolkit@0.1.0', 'sap-ai-dev']
   });
   assert.deepEqual(Object.keys(result.servers).sort(), ['cf:space-one:instance-one:shared', 'shared']);
   const written = await readMcpConfig(path);
@@ -138,7 +167,7 @@ test('wizard replaces legacy launcher entries with the branded command and envir
   await installMcpConfig([bas], { env: { H2O_URL: 'http://h2o.example', BAS_VSP_MCP_CONFIG: path } });
   const migrated = await readMcpConfig(path);
   assert.deepEqual(Object.keys(migrated.servers).sort(), ['shared', 'userServer']);
-  assert.equal(migrated.servers.shared.command, 'sap-ai-dev-toolkit');
+  assert.equal(migrated.servers.shared.command, 'sap-ai-dev');
   assert.equal(migrated.servers.shared.env.SAP_AI_DEV_TOOLKIT_DESTINATION, 'shared');
   assert.equal(migrated.servers.shared.env.BAS_VSP_DESTINATION, undefined);
   assert.equal(migrated.servers.userServer.command, 'custom-server');
