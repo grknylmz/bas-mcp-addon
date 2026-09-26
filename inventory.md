@@ -1,13 +1,15 @@
-# VSP Tool Inventory
+# SAP AI Dev Toolkit Tool Inventory
 
-This inventory reflects the current BAS MCP proxy behavior in `src/mcp-proxy.mjs`. The proxy now exposes every tool registered by the active child VSP process. The live MCP `tools/list` response remains authoritative because available tools vary by VSP mode and SAP system.
+This inventory reflects the current SAP AI Dev Toolkit proxy behavior in `src/mcp-proxy.mjs`. The proxy exposes every tool registered by the active VSP process. The live MCP `tools/list` response remains authoritative because available tools vary by VSP mode and SAP system.
 
 ## Summary
 
 | Status | Count | Notes |
 | --- | ---: | --- |
 | VSP tools | Dynamic | All registered child VSP tools are exposed with a destination prefix, for example `<destination>__GetSource`. |
-| Add-on tools | 2 | `LintABAP` is local. `GetApplicationLog` is a convenience mapping to VSP `SAP(action="analyze", type="application_log")`. |
+| Local lint tool | 1 per destination | `LintABAP` analyzes caller-supplied ABAP source in memory. |
+| Workflow tools | Up to 6 per destination | Review/apply change sets, transport evidence, Clean Core release assessment, and read-only RAP regression suites. Some are exposed only when their upstream VSP tools are registered. |
+| Convenience mapping | Dynamic | `GetApplicationLog` maps to VSP `SAP(action="analyze", type="application_log")` when the SAP router is registered. |
 | Intentionally filtered VSP tools | 0 | No VSP tool names are filtered by the proxy. |
 | Mode-dependent | Dynamic | Focused/expert mode and backend capabilities determine what VSP registers. |
 
@@ -143,6 +145,15 @@ These are known from the repository fixtures, README, and historical proxy allow
 
 - `LintABAP` — local add-on tool; lints caller-supplied ABAP source without contacting SAP.
 - `GetApplicationLog` — add-on convenience tool mapped to VSP `SAP` with `action="analyze"` and `type="application_log"`.
+
+## Destination workflow tools
+
+- `PrepareABAPChangeSet` — stage full-source `WriteSource` changes and return review diffs and source fingerprints.
+- `ApplyABAPChangeSet` — re-read staged objects before writing and report conflicts or partial application.
+- `CheckTransportReadiness` — collect selected transport, dependency, inactive-object, ABAP Unit, and ATC evidence.
+- `PlanABAPCloudMigration` — batch-check API release state for supplied ADT object URIs and prioritize recognized unreleased APIs.
+- `GenerateRAPRegressionSuite` — read service metadata and emit reusable GET-only smoke cases for entity sets.
+- `RunRAPRegressionSuite` — execute saved cases with status, content-type, and JSON-path assertions over the connected destination.
 
 ## Notes
 

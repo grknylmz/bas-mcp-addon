@@ -23,7 +23,7 @@ test('returns every named destination regardless of ADT probe and preserves allo
   const probeImpl = async url => ({ status: url.includes('a-system') ? 403 : url.includes('b-system') ? 200 : 404 });
   const allowlisted = await discoverDestinations({
     body,
-    env: { BAS_VSP_DESTINATION: 'a-system,b-system' },
+    env: { SAP_AI_DEV_TOOLKIT_DESTINATION: 'a-system,b-system' },
     probeImpl
   });
   assert.deepEqual(allowlisted.map(item => [item.name, item.client, item.probe.status]), [
@@ -37,6 +37,15 @@ test('returns every named destination regardless of ADT probe and preserves allo
     ['b-system', 'available'],
     ['z-system', 'not-found']
   ]);
+});
+
+test('accepts the previous destination environment variable during upgrades', async () => {
+  const destinations = await discoverDestinations({
+    body: [{ Name: 'legacy-system' }, { Name: 'other-system' }],
+    env: { BAS_VSP_DESTINATION: 'legacy-system' },
+    skipProbe: true
+  });
+  assert.deepEqual(destinations.map(destination => destination.name), ['legacy-system']);
 });
 test('parses sample-style destination records and enables every ADT heartbeat response', async () => {
   const body = [

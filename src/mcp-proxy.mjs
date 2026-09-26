@@ -2,6 +2,8 @@ import { spawn as nodeSpawn } from 'node:child_process';
 import { once } from 'node:events';
 import { sanitizeChildEnv, slugifyDestination } from './bas-discovery.mjs';
 import { ABAP_LINT_TOOL, runABAPLint } from './abaplint.mjs';
+import { createEngineeringTools } from './engineering-tools.mjs';
+import { brandedEnvValue } from './branding.mjs';
 
 const JSONRPC = '2.0';
 const FORWARDED_METHODS = new Set(['ping', 'resources/list', 'resources/read', 'resources/templates/list', 'prompts/list', 'completion/complete', 'logging/setLevel']);
@@ -64,7 +66,7 @@ function childEnvironment(destination, env) {
 export function childArguments(destination, env = process.env) {
   // The proxy allowlist keeps transport mutations to CreateTransport.
   // Transportable source edits are controlled by SAP_ALLOW_TRANSPORTABLE_EDITS.
-  const mode = env.BAS_VSP_MODE || 'expert';
+  const mode = brandedEnvValue(env, 'MODE') || 'expert';
   const args = ['--url', destination.url, '--client', destination.client || '001', '--mode', mode];
   if (destination.source !== 'cloud-foundry' || destination.authentication === 'PrincipalPropagation') args.push('--proxy-auth');
   args.push('--enable-transports');
@@ -186,11 +188,12 @@ class Child {
 }
 
 export class MCPProxy {
-  constructor({ binary, destinations, env = process.env, spawn = nodeSpawn, log = message => console.error(message), output = line => process.stdout.write(`${line}\n`) }) {
+  constructor({ binary, destinations, env = process.env, spawn = nodeSpawn, childArgs, log = message => console.error(message), output = line => process.stdout.write(`${line}\n`) }) {
     this.binary = binary;
     this.destinations = destinations;
     this.env = env;
     this.spawn = spawn;
+    this.childArgs = childArgs;
     this.log = log;
     this.output = output;
     this.children = [];
@@ -214,6 +217,7 @@ export class MCPProxy {
           child: new Child(this.binary, destination, {
             env: this.env,
             spawn: this.spawn,
+            args: this.childArgs?.(destination),
             log: this.log,
             onNotification: notification => {
               if (this.clientInitialized) this.output(JSON.stringify(notification));
@@ -264,7 +268,8 @@ export class MCPProxy {
       this.namespace.set(lintName, { handler: runABAPLint });
       merged.push({ ...ABAP_LINT_TOOL, name: lintName });
       try {
-        for (const tool of await entry.child.listTools()) {
+        const upstreamTools = await entry.child.listTools();
+        for (const tool of upstreamTools) {
           if (tool.name === 'SAP') {
             const applicationLogName = `${slug}__GetApplicationLog`;
             this.namespace.set(applicationLogName, {
@@ -284,6 +289,15 @@ export class MCPProxy {
           this.namespace.set(name, { entry, upstream: tool.name });
           merged.push({ ...tool, name, description: `${tool.description || tool.name} [destination: ${entry.destination.name}]` });
         }
+        for (const localTool of createEngineeringTools(entry, upstreamTools, { env: this.env, log: this.log })) {
+          const name = `${slug}__${localTool.definition.name}`;
+          this.namespace.set(name, { handler: localTool.handler });
+          merged.push({
+            ...localTool.definition,
+            name,
+            description: `${localTool.definition.description} [destination: ${entry.destination.name}]`
+          });
+        }
       } catch (error) {
         this.log(`[${entry.destination.name}] tools/list failed: ${redactText(error.message)}`);
       }
@@ -301,7 +315,7 @@ export class MCPProxy {
     try {
       if (message.method === 'initialize') {
         await this.initializeChildren(message.params || {});
-        return rpcResult(message.id, { protocolVersion: message.params?.protocolVersion || '2024-11-05', capabilities: { tools: {} }, serverInfo: { name: this.env.BAS_VSP_DESTINATION || this.children[0].destination.name, version: '0.1.0' } });
+        return rpcResult(message.id, { protocolVersion: message.params?.protocolVersion || '2024-11-05', capabilities: { tools: {} }, serverInfo: { name: brandedEnvValue(this.env, 'DESTINATION') || this.children[0].destination.name, version: '0.1.0' } });
       }
       if (!this.initialized) return rpcError(message.id, -32002, 'MCP proxy is not initialized');
       if (message.method === 'tools/list') return rpcResult(message.id, { tools: await this.mergedTools() });

@@ -1,4 +1,4 @@
-Third-party notices for bas-mcp-addon
+Third-party notices for sap-ai-dev-toolkit
 
 This package includes patched VSP (vibing-steampunk) binaries built from upstream commit
 9886d2727f47506368b0a3c2f1c1766f1200f747. The BAS proxy-auth change is documented in

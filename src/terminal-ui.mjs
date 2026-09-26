@@ -1,4 +1,5 @@
 import { Writable } from 'node:stream';
+import { PRODUCT_NAME } from './branding.mjs';
 
 const COLORS = {
   cyan: '\u001b[1;36m',
@@ -37,7 +38,7 @@ export function iconLabel(icon, label, color, output) {
   return colorText(`${icon} ${label}`, color, output);
 }
 
-export function formatStatus(message, tone, output, label = 'bas-mcp-addon') {
+export function formatStatus(message, tone, output, label = PRODUCT_NAME) {
   const { icon, color } = STATUS[tone] || STATUS.info;
   return `${iconLabel(icon, label, color, output)} ${message}`;
 }

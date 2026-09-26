@@ -70,7 +70,7 @@ async function main() {
     let env = { ...process.env };
     if (!dryRun) {
       const token = await npmToken();
-      authDirectory = await mkdtemp(join(tmpdir(), 'bas-mcp-addon-npm-'));
+      authDirectory = await mkdtemp(join(tmpdir(), 'sap-ai-dev-toolkit-npm-'));
       const userConfig = join(authDirectory, '.npmrc');
       await writeFile(userConfig, '//registry.npmjs.org/:_authToken=${NPM_PUBLISH_TOKEN}\n', { encoding: 'utf8', mode: 0o600 });
       env = {

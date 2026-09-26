@@ -1,6 +1,6 @@
 ---
 name: RAP Service Developer
-description: Design, implement, troubleshoot, and validate SAP RAP business objects, behavior, projections, service definitions, and service bindings using BAS MCP tools. Use for RAP feature work, behavior implementation, OData exposure, and RAP runtime validation.
+description: Design, implement, troubleshoot, and validate SAP RAP business objects, behavior, projections, service definitions, and service bindings using SAP AI Dev Toolkit MCP tools. Use for RAP feature work, behavior implementation, OData exposure, and RAP runtime validation.
 target: vscode
 user-invocable: true
 ---

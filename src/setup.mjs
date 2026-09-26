@@ -5,8 +5,9 @@ import { colorText, formatStatus, promptOutput, quietSpinnerTheme } from './term
 import { discoverDestinations, remediation } from './bas-discovery.mjs';
 import { discoverCloudFoundryDestinations, getCloudFoundryTarget, deleteManagedCloudFoundryServiceKeys } from './cf-destination.mjs';
 import { collectCloudFoundryKeyReferencesFromAllEntries, collectManagedCloudFoundryKeyReferences, installMcpConfig, readMcpConfig, resolveMcpConfigPath } from './mcp-config.mjs';
+import { brandedEnvValue } from './branding.mjs';
 
-const SETUP_COMMAND = 'bas-vsp-mcp --setup';
+const SETUP_COMMAND = 'sap-ai-dev-toolkit --setup';
 
 function print(output, message) {
   output.write(`${message}\n`);
@@ -73,13 +74,13 @@ function printConnectionInstructions(output, result) {
   const servers = Object.entries(result?.servers || {});
   if (!servers.length) {
     print(output, '');
-    print(output, formatStatus('No destinations were selected; no MCP servers were added.', 'info', output, 'BAS setup'));
+    print(output, formatStatus('No destinations were selected; no MCP servers were added.', 'info', output, 'SAP AI Dev Toolkit'));
     return;
   }
   print(output, '');
   print(output, colorText('📡 MCP servers now available:', 'cyan', output));
   for (const [name, entry] of servers) {
-    print(output, `  • ${name} — destination: ${entry.env?.BAS_VSP_DESTINATION || 'unknown'}`);
+    print(output, `  • ${name} — destination: ${brandedEnvValue(entry.env, 'DESTINATION') || 'unknown'}`);
   }
   print(output, formatStatus('Open the Command Palette → “MCP: List Servers”, select a generated server, and choose “Start Server”.', 'step', output, 'Next'));
   print(output, formatStatus('Inspect or edit entries with “MCP: Open User Configuration”.', 'info', output, 'Config'));
@@ -96,11 +97,11 @@ export async function runSetup({
   install = installMcpConfig
 } = {}) {
   if (!env.H2O_URL) {
-    print(output, formatStatus(`Setup skipped: H2O_URL is not set. Run ${SETUP_COMMAND} in a BAS dev space.`, 'info', output, 'BAS setup'));
+    print(output, formatStatus(`Setup skipped: H2O_URL is not set. Run ${SETUP_COMMAND} in a BAS dev space.`, 'info', output, 'SAP AI Dev Toolkit'));
     return { skipped: true, reason: 'non-bas' };
   }
   if (!input.isTTY || !output.isTTY) {
-    print(output, formatStatus(`Interactive setup needs a terminal. Rerun ${SETUP_COMMAND} from a BAS terminal.`, 'warning', output, 'BAS setup'));
+    print(output, formatStatus(`Interactive setup needs a terminal. Rerun ${SETUP_COMMAND} from a BAS terminal.`, 'warning', output, 'SAP AI Dev Toolkit'));
     return { skipped: true, reason: 'non-tty' };
   }
   print(output, '');
@@ -108,7 +109,7 @@ export async function runSetup({
 
   let basDestinations;
   try {
-    basDestinations = await discover({ env: { ...env, BAS_VSP_DESTINATION: '' } });
+    basDestinations = await discover({ env: { ...env, SAP_AI_DEV_TOOLKIT_DESTINATION: '' } });
   } catch (error) {
     throw new Error(`BAS discovery failed: ${error.message}`);
   }
@@ -143,7 +144,7 @@ export async function runSetup({
         destinations.push(...cfDestinations.map(safeCloudFoundryDestination));
         warnings.push(...(Array.isArray(result?.warnings) ? result.warnings.filter(value => typeof value === 'string') : []));
       } catch {
-        warnings.push('Cloud Foundry import failed; BAS setup can continue.');
+        warnings.push('Cloud Foundry import failed; SAP AI Dev Toolkit setup can continue.');
       }
     } else if (!warnings.some(message => message.includes('Cloud Foundry import prompt failed'))) {
       warnings.push('Cloud Foundry destinations were skipped because import was not confirmed.');
@@ -212,7 +213,7 @@ export async function runSetup({
     const result = await install(selected, { env });
     const location = result?.path ? ` in ${result.path}` : '';
     print(output, '');
-    print(output, formatStatus(`Configured ${selected.length} MCP server${selected.length === 1 ? '' : 's'}${location}.`, 'success', output, 'BAS setup'));
+    print(output, formatStatus(`Configured ${selected.length} MCP server${selected.length === 1 ? '' : 's'}${location}.`, 'success', output, 'SAP AI Dev Toolkit'));
     printConnectionInstructions(output, result);
     let cleanupWarnings = [];
     const finalPath = result?.path || configPath;
@@ -248,4 +249,3 @@ export async function runSetup({
     throw new Error(`MCP config writing failed: ${error.message}`);
   }
 }
-

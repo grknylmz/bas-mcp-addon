@@ -3,9 +3,10 @@ import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { spawnWithPty } from './pty.mjs';
 
 const launcher = fileURLToPath(new URL('../src/launcher.mjs', import.meta.url));
 const fakeVsp = fileURLToPath(new URL('./fixtures/fake-vsp.mjs', import.meta.url));
@@ -24,10 +25,11 @@ function runLauncher(args, env) {
 function runLauncherTty(env, input, args = ['--setup']) {
   return new Promise((resolve, reject) => {
     const command = `${process.execPath} ${launcher} ${args.join(' ')}`;
-    const child = spawn('script', ['-qec', command, '/dev/null'], { env, stdio: ['pipe', 'pipe', 'pipe'] });
+    const child = spawnWithPty(command, { env, stdio: ['pipe', 'pipe', 'pipe'] });
     let stdout = '';
     let stderr = '';
     let inputSent = false;
+    const timeout = setTimeout(() => child.kill('SIGKILL'), 15000);
     child.stdout.on('data', chunk => {
       stdout += chunk.toString();
       if (!inputSent && stdout.includes('Select destinations')) {
@@ -36,8 +38,8 @@ function runLauncherTty(env, input, args = ['--setup']) {
       }
     });
     child.stderr.on('data', chunk => { stderr += chunk.toString(); });
-    child.on('error', reject);
-    child.on('exit', (code, signal) => resolve({ code, signal, stdout, stderr }));
+    child.on('error', error => { clearTimeout(timeout); reject(error); });
+    child.on('exit', (code, signal) => { clearTimeout(timeout); resolve({ code, signal, stdout, stderr, inputSent }); });
   });
 }
 
@@ -54,9 +56,30 @@ test('help exits before BAS destination discovery', async t => {
   const result = await runLauncher(['--help'], { ...process.env, H2O_URL: `http://127.0.0.1:${server.address().port}`, NO_PROXY: '127.0.0.1' });
   assert.equal(result.code, 0, result.stderr);
   assert.equal(result.stderr, '');
-  assert.match(result.stdout, /Usage: bas-vsp-mcp/);
+  assert.match(result.stdout, /Usage: sap-ai-dev-toolkit/);
   assert.match(result.stdout, /Use an MCP client to call server tools/);
   assert.equal(requests, 0);
+});
+
+test('doctor reports missing BAS configuration as redacted JSON', async () => {
+  const result = await runLauncher(['--doctor', '--json'], {
+    ...process.env,
+    H2O_URL: '',
+    SAP_AI_DEV_TOOLKIT_DESTINATION_SOURCE: '',
+    BAS_VSP_DESTINATION_SOURCE: ''
+  });
+  assert.equal(result.code, 1);
+  assert.equal(result.stderr, '');
+  assert.deepEqual(JSON.parse(result.stdout), {
+    ok: false,
+    destinations: 0,
+    checks: [{
+      name: '-',
+      stage: 'destination discovery',
+      status: 'failed',
+      detail: 'H2O_URL is required for BAS destination discovery'
+    }]
+  });
 });
 
 test('list-destinations JSON is redacted and probes through the BAS proxy', async () => {
@@ -98,9 +121,9 @@ test('runtime starts destinations even when their ADT probes fail', async () => 
   try {
     const result = await runLauncher([], {
       ...process.env,
-      BAS_VSP_BINARY: fakeVsp,
+      SAP_AI_DEV_TOOLKIT_BINARY: fakeVsp,
       H2O_URL: 'http://bas.example',
-      BAS_VSP_DESTINATION: 'launch-system',
+      SAP_AI_DEV_TOOLKIT_DESTINATION: 'launch-system',
       HTTP_PROXY: proxy,
       http_proxy: proxy,
       NO_PROXY: '',
@@ -117,8 +140,21 @@ test('runtime starts destinations even when their ADT probes fail', async () => 
 });
 test('setup subprocess writes one isolated MCP entry per selected destination', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'bas-launcher-setup-'));
+  const bin = join(directory, 'bin');
+  await mkdir(bin);
+  const cfCli = join(bin, 'cf');
+  await writeFile(cfCli, '#!/bin/sh\nexit 1\n');
+  await chmod(cfCli, 0o755);
   const config = join(directory, 'mcp.json');
-  await writeFile(config, JSON.stringify({ inputs: [], servers: { unrelated: { type: 'stdio', command: 'other' } } }));
+  await writeFile(config, JSON.stringify({ inputs: [], servers: {
+    unrelated: { type: 'stdio', command: 'other' },
+    'alpha-system': {
+      type: 'stdio',
+      command: 'bas-vsp-mcp',
+      env: { H2O_URL: 'http://old-h2o.example', BAS_VSP_DESTINATION: 'alpha-system' },
+      BAS_EXT: 'true'
+    }
+  } }));
   const server = createServer((request, response) => {
     if (request.url === '/api/listDestinations') {
       response.setHeader('content-type', 'application/json');
@@ -132,18 +168,19 @@ test('setup subprocess writes one isolated MCP entry per selected destination', 
     response.end();
   });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
-  const env = { ...process.env, H2O_URL: `http://127.0.0.1:${server.address().port}`, BAS_VSP_SKIP_PROBE: 'true', BAS_VSP_MCP_CONFIG: config };
+  const env = { ...process.env, PATH: `${bin}:${process.env.PATH || ''}`, H2O_URL: `http://127.0.0.1:${server.address().port}`, SAP_AI_DEV_TOOLKIT_SKIP_PROBE: 'true', SAP_AI_DEV_TOOLKIT_MCP_CONFIG: config };
   try {
     const first = await runLauncherTty(env, 'a\r', ['--setup', '--npx']);
     assert.equal(first.code, 0, `${first.stdout}\n${first.stderr}`);
     let current = JSON.parse(await readFile(config, 'utf8'));
     let generated = Object.entries(current.servers).filter(([, entry]) => entry.BAS_EXT === 'true');
-    assert.deepEqual(generated.map(([, entry]) => entry.env.BAS_VSP_DESTINATION), ['alpha-system', 'beta-system'], `${first.stdout}\n${first.stderr}`);
+    assert.deepEqual(generated.map(([, entry]) => entry.env.SAP_AI_DEV_TOOLKIT_DESTINATION), ['alpha-system', 'beta-system'], `${first.stdout}\n${first.stderr}`);
+    assert.equal(current.servers['alpha-system'].env.BAS_VSP_DESTINATION, undefined);
     assert.equal(generated.every(([, entry]) => entry.env.H2O_URL === env.H2O_URL), true);
     const packageJson = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
     assert.deepEqual(generated.map(([, entry]) => [entry.command, entry.args]), [
-      ['npx', ['--yes', '--ignore-scripts', `--package=bas-mcp-addon@${packageJson.version}`, 'bas-vsp-mcp']],
-      ['npx', ['--yes', '--ignore-scripts', `--package=bas-mcp-addon@${packageJson.version}`, 'bas-vsp-mcp']]
+      ['npx', ['--yes', '--ignore-scripts', `--package=sap-ai-dev-toolkit@${packageJson.version}`, 'sap-ai-dev-toolkit']],
+      ['npx', ['--yes', '--ignore-scripts', `--package=sap-ai-dev-toolkit@${packageJson.version}`, 'sap-ai-dev-toolkit']]
     ]);
     const second = await runLauncherTty(env, '\r', ['--setup', '--npx']);
     assert.equal(second.code, 0, `${second.stdout}\\n${second.stderr}`);

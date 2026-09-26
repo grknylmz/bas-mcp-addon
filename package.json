@@ -1,7 +1,7 @@
 {
-  "name": "bas-mcp-addon",
+  "name": "sap-ai-dev-toolkit",
   "version": "0.2.3",
-  "description": "SAP Business Application Studio MCP entry point for vibing-steampunk ADT tools",
+  "description": "SAP AI development toolkit for ABAP, CDS, and RAP workflows through MCP",
   "author": "Gurkan Yilmaz",
   "type": "module",
   "engines": {
@@ -13,7 +13,7 @@
     "undici": "^6.21.3"
   },
   "bin": {
-    "bas-vsp-mcp": "src/launcher.mjs"
+    "sap-ai-dev-toolkit": "src/launcher.mjs"
   },
   "scripts": {
     "postinstall": "node scripts/postinstall.mjs",
@@ -26,11 +26,11 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/grknylmz/bas-mcp-addon.git"
+    "url": "git+https://github.com/grknylmz/sap-ai-dev-toolkit.git"
   },
-  "homepage": "https://github.com/grknylmz/bas-mcp-addon#readme",
+  "homepage": "https://github.com/grknylmz/sap-ai-dev-toolkit#readme",
   "bugs": {
-    "url": "https://github.com/grknylmz/bas-mcp-addon/issues"
+    "url": "https://github.com/grknylmz/sap-ai-dev-toolkit/issues"
   },
   "license": "MIT",
   "files": [

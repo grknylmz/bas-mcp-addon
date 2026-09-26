@@ -5,7 +5,8 @@ import { dirname, join, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const packageRoot = dirname(dirname(fileURLToPath(import.meta.url)));
-const manifestName = '.bas-mcp-addon-assets.json';
+const manifestName = '.sap-ai-dev-toolkit-assets.json';
+const legacyManifestName = '.bas-mcp-addon-assets.json';
 
 function digest(content) {
   return createHash('sha256').update(content).digest('hex');
@@ -62,8 +63,11 @@ export async function installUserCopilotAssets({ home = process.env.HOME || home
 
   const copilotRoot = join(home, '.copilot');
   const manifestPath = join(copilotRoot, manifestName);
+  const legacyManifestPath = join(copilotRoot, legacyManifestName);
   await mkdir(copilotRoot, { recursive: true, mode: 0o755 });
-  const previousFiles = await readManagedFiles(manifestPath);
+  const legacyFiles = await readManagedFiles(legacyManifestPath);
+  const currentFiles = await readManagedFiles(manifestPath);
+  const previousFiles = { ...legacyFiles, ...currentFiles };
   const managedFiles = { ...previousFiles };
   const conflicts = [];
   let installed = 0;
@@ -106,5 +110,6 @@ export async function installUserCopilotAssets({ home = process.env.HOME || home
   }
 
   await replaceFile(manifestPath, `${JSON.stringify({ version: 1, files: managedFiles }, null, 2)}\n`);
+  await rm(legacyManifestPath, { force: true });
   return { root: copilotRoot, installed, updated, unchanged, conflicts };
 }

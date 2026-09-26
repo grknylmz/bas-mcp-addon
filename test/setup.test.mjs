@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readFile, readdir, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { spawn } from 'node:child_process';
 import { stripVTControlCharacters } from 'node:util';
@@ -10,6 +10,7 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { installMcpConfig } from '../src/mcp-config.mjs';
 import { runSetup } from '../src/setup.mjs';
+import { spawnWithPty } from './pty.mjs';
 
 const destinations = [
   { name: 'alpha-system', client: '100', authentication: 'Basic', probe: { status: 'available', available: true } },
@@ -30,7 +31,7 @@ function outputStream() {
 function runSetupVisibilityInPty(fixture, env, keys = '\r') {
   return new Promise((resolve, reject) => {
     const command = `stty cols 48 rows 12; ${JSON.stringify(process.execPath)} ${JSON.stringify(fixture)}`;
-    const child = spawn('script', ['-qec', command, '/dev/null'], { env, stdio: ['pipe', 'pipe', 'pipe'] });
+    const child = spawnWithPty(command, { env, stdio: ['pipe', 'pipe', 'pipe'] });
     let stdout = '';
     let stderr = '';
     let selectionSent = false;
@@ -57,7 +58,7 @@ function runSetupVisibilityInPty(fixture, env, keys = '\r') {
 function runPostinstallInPty(env, keys, assetsAnswer = '\r') {
   return new Promise((resolve, reject) => {
     const command = `${JSON.stringify(process.execPath)} scripts/postinstall.mjs </dev/null | cat`;
-    const child = spawn('script', ['-qec', command, '/dev/null'], { env, stdio: ['pipe', 'pipe', 'pipe'] });
+    const child = spawnWithPty(command, { env, stdio: ['pipe', 'pipe', 'pipe'] });
     let stdout = '';
     let stderr = '';
     let selectionSent = false;
@@ -69,7 +70,7 @@ function runPostinstallInPty(env, keys, assetsAnswer = '\r') {
         selectionSent = true;
         child.stdin.write(keys);
       }
-      if (!assetsAnswerSent && stdout.includes('Install the ABAP Developer agent and six skills')) {
+      if (!assetsAnswerSent && stdout.includes('Install the ABAP Developer agent and bundled skills')) {
         assetsAnswerSent = true;
         child.stdin.write(assetsAnswer);
       }
@@ -93,9 +94,11 @@ async function assertUserCopilotAssets(home) {
   assert.deepEqual(skillNames, [
     'abap-debugging',
     'abap-development',
+    'abap-runtime-analysis',
     'abap-testing-quality',
     'cds-development',
     'rap-development',
+    'rap-service-delivery',
     'sap-transport-release'
   ]);
   for (const skillName of skillNames) {
@@ -123,9 +126,9 @@ test('reconciles generated entries while preserving unrelated MCP config', async
     assert.deepEqual(Object.keys(config.servers).sort(), ['alpha-system', 'beta-system', 'unrelated']);
     assert.deepEqual(generated.map(([name]) => name), ['alpha-system', 'beta-system']);
     assert.equal(generated.length, 2);
-    assert.deepEqual(generated.map(([, entry]) => entry.env.BAS_VSP_DESTINATION), ['alpha-system', 'beta-system']);
+    assert.deepEqual(generated.map(([, entry]) => entry.env.SAP_AI_DEV_TOOLKIT_DESTINATION), ['alpha-system', 'beta-system']);
     assert.deepEqual(generated.map(([, entry]) => entry.env.H2O_URL), ['http://new-h2o', 'http://new-h2o']);
-    assert.deepEqual(generated.map(([, entry]) => entry.command), ['bas-vsp-mcp', 'bas-vsp-mcp']);
+    assert.deepEqual(generated.map(([, entry]) => entry.command), ['sap-ai-dev-toolkit', 'sap-ai-dev-toolkit']);
     assert.deepEqual(generated.map(([, entry]) => entry.env.SAP_ALLOW_TRANSPORTABLE_EDITS), ['true', 'true']);
     assert.equal(new Set(generated.map(([name]) => name)).size, 2);
 
@@ -182,13 +185,13 @@ const destinations = [
 await runSetup({
   env: { ...process.env, H2O_URL: 'http://h2o.example', PATH: ${JSON.stringify(`${bin}:${process.env.PATH || ''}`)} },
   discover: async () => destinations,
-  install: async selected => ({ path: process.env.BAS_VSP_MCP_CONFIG, servers: Object.fromEntries(selected.map(destination => [destination.name, { env: { BAS_VSP_DESTINATION: destination.name } }])) })
+  install: async selected => ({ path: process.env.SAP_AI_DEV_TOOLKIT_MCP_CONFIG, servers: Object.fromEntries(selected.map(destination => [destination.name, { env: { SAP_AI_DEV_TOOLKIT_DESTINATION: destination.name } }])) })
 });
 `);
   try {
     const env = {
       ...process.env,
-      BAS_VSP_MCP_CONFIG: join(directory, 'mcp.json'),
+      SAP_AI_DEV_TOOLKIT_MCP_CONFIG: join(directory, 'mcp.json'),
       FORCE_COLOR: '1',
       PATH: `${bin}:${process.env.PATH || ''}`
     };
@@ -227,6 +230,11 @@ test('non-TTY setup skips without writing config', async () => {
 test('global postinstall completes BAS selection before optional Copilot assets', async t => {
   const directory = await mkdtemp(join(tmpdir(), 'bas-postinstall-wizard-'));
   const config = join(directory, 'mcp.json');
+  const bin = join(directory, 'bin');
+  await mkdir(bin);
+  const cfCli = join(bin, 'cf');
+  await writeFile(cfCli, '#!/bin/sh\nexit 1\n');
+  await chmod(cfCli, 0o755);
   const server = createServer((request, response) => {
     if (request.url === '/api/listDestinations') {
       response.writeHead(200, { 'content-type': 'application/json' });
@@ -244,9 +252,10 @@ test('global postinstall completes BAS selection before optional Copilot assets'
   const env = {
     ...process.env,
     HOME: directory,
+    PATH: `${bin}:${process.env.PATH || ''}`,
     BAS_VSP_BINARY: '/bin/true',
-    BAS_VSP_MCP_CONFIG: config,
-    BAS_VSP_SKIP_PROBE: 'true',
+    SAP_AI_DEV_TOOLKIT_MCP_CONFIG: config,
+    SAP_AI_DEV_TOOLKIT_SKIP_PROBE: 'true',
     H2O_URL: `http://127.0.0.1:${server.address().port}`,
     HTTP_PROXY: '',
     http_proxy: '',
@@ -267,13 +276,13 @@ test('global postinstall completes BAS selection before optional Copilot assets'
   const declineLogs = `${declined.stdout}\n${declined.stderr}`;
   assert.match(declineLogs, /Configured 0 MCP servers/);
   assert.match(declineLogs, /\[Y\/n\]/);
-  assert.match(declineLogs, /Press Enter to install the ABAP Developer agent and six skills in the path shown below; type n then press Enter to skip/);
-  assert.match(declineLogs, /🤖 bas-mcp-addon/);
+  assert.match(declineLogs, /Press Enter to install the ABAP Developer agent and bundled skills in the path shown below; type n then press Enter to skip/);
+  assert.match(declineLogs, /🤖 sap-ai-dev-toolkit/);
   assert.match(declineLogs, /\u001b\[1;35m/);
   assert.match(declineLogs, /Optional Copilot setup is waiting for your choice/);
   assert.match(declineLogs, /Copilot agent and skills were skipped\. Your files were not changed/);
   assert.ok(declineLogs.indexOf('Optional Copilot setup is waiting for your choice') > declineLogs.indexOf('Configured 0 MCP servers'), declineLogs);
-  assert.ok(declineLogs.indexOf('Install the ABAP Developer agent and six skills') > declineLogs.indexOf('Optional Copilot setup is waiting for your choice'), declineLogs);
+  assert.ok(declineLogs.indexOf('Install the ABAP Developer agent and bundled skills') > declineLogs.indexOf('Optional Copilot setup is waiting for your choice'), declineLogs);
   assert.ok(declineLogs.indexOf('No MCP server entries are configured for this add-on.') > declineLogs.indexOf('Copilot agent and skills were skipped'), declineLogs);
   assert.ok(declineLogs.includes(`MCP config file: ${config}`), declineLogs);
   const configAfterDecline = JSON.parse(await readFile(config, 'utf8'));
@@ -285,17 +294,17 @@ test('global postinstall completes BAS selection before optional Copilot assets'
   assert.equal(accepted.selectionSent, true, accepted.stdout);
   assert.equal(accepted.assetsAnswerSent, true, accepted.stdout);
   const acceptLogs = `${accepted.stdout}\n${accepted.stderr}`;
-  assert.ok(acceptLogs.indexOf('Install the ABAP Developer agent and six skills') > acceptLogs.indexOf('Configured 1 MCP server'), acceptLogs);
-  assert.match(acceptLogs, /Installed 7 Copilot files/);
-  assert.ok(acceptLogs.indexOf('Installation configuration summary') > acceptLogs.indexOf('Installed 7 Copilot files'), acceptLogs);
+  assert.ok(acceptLogs.indexOf('Install the ABAP Developer agent and bundled skills') > acceptLogs.indexOf('Configured 1 MCP server'), acceptLogs);
+  assert.match(acceptLogs, /Installed 11 Copilot files/);
+  assert.ok(acceptLogs.indexOf('Installation configuration summary') > acceptLogs.indexOf('Installed 11 Copilot files'), acceptLogs);
   assert.ok(acceptLogs.includes(`MCP config file: ${config}`), acceptLogs);
   assert.ok(acceptLogs.includes('Destination: BAS · alpha-system · client 100 · Basic'), acceptLogs);
-  assert.ok(acceptLogs.includes('Launch: stdio · bas-vsp-mcp'), acceptLogs);
-  assert.ok(acceptLogs.includes('Environment keys: BAS_VSP_DESTINATION, H2O_URL, SAP_ALLOW_TRANSPORTABLE_EDITS'), acceptLogs);
+  assert.ok(acceptLogs.includes('Launch: stdio · sap-ai-dev-toolkit'), acceptLogs);
+  assert.ok(acceptLogs.includes('Environment keys: H2O_URL, SAP_AI_DEV_TOOLKIT_DESTINATION, SAP_ALLOW_TRANSPORTABLE_EDITS'), acceptLogs);
   const configAfterAccept = JSON.parse(await readFile(config, 'utf8'));
   assert.deepEqual(Object.values(configAfterAccept.servers)
     .filter(entry => entry.BAS_EXT === 'true')
-    .map(entry => entry.env.BAS_VSP_DESTINATION), ['alpha-system']);
+    .map(entry => entry.env.SAP_AI_DEV_TOOLKIT_DESTINATION), ['alpha-system']);
   await assertUserCopilotAssets(directory);
 });
 
@@ -306,7 +315,7 @@ test('non-TTY postinstall skips setup and leaves MCP config untouched', async ()
   const env = {
     ...process.env,
     HOME: directory,
-    BAS_VSP_BINARY: '/bin/true',
+    SAP_AI_DEV_TOOLKIT_BINARY: '/bin/true',
     H2O_URL: 'http://bas.example'
   };
   delete env.npm_config_ignore_scripts;
@@ -314,7 +323,7 @@ test('non-TTY postinstall skips setup and leaves MCP config untouched', async ()
   try {
     for (const original of [undefined, JSON.stringify({ servers: { unrelated: { command: 'other' } } })]) {
       const config = join(directory, original === undefined ? 'new.json' : 'existing.json');
-      env.BAS_VSP_MCP_CONFIG = config;
+      env.SAP_AI_DEV_TOOLKIT_MCP_CONFIG = config;
       if (original !== undefined) await writeFile(config, original);
       const result = await new Promise((resolve, reject) => {
         const child = spawn(process.execPath, ['scripts/postinstall.mjs'], { env, stdio: ['ignore', 'pipe', 'pipe'] });
@@ -344,8 +353,8 @@ test('postinstall skips optional Copilot assets without an interactive terminal'
   const env = {
     ...process.env,
     HOME: join(directory, 'home'),
-    BAS_VSP_BINARY: '/bin/true',
-    BAS_VSP_MCP_CONFIG: config
+    SAP_AI_DEV_TOOLKIT_BINARY: '/bin/true',
+    SAP_AI_DEV_TOOLKIT_MCP_CONFIG: config
   };
   delete env.H2O_URL;
   delete env.npm_config_ignore_scripts;
@@ -365,6 +374,36 @@ test('postinstall skips optional Copilot assets without an interactive terminal'
     await assert.rejects(stat(join(env.HOME, '.copilot')), { code: 'ENOENT' });
     await assert.rejects(stat(join(directory, '.github')), { code: 'ENOENT' });
     await assert.rejects(readFile(config), { code: 'ENOENT' });
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('postinstall runs when invoked through a symlinked install path', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'sap-ai-postinstall-symlink-'));
+  const alias = join(directory, 'postinstall.mjs');
+  await symlink(join(process.cwd(), 'scripts', 'postinstall.mjs'), alias);
+  const env = {
+    ...process.env,
+    HOME: directory,
+    SAP_AI_DEV_TOOLKIT_BINARY: '/bin/true'
+  };
+  delete env.H2O_URL;
+  delete env.npm_config_ignore_scripts;
+  delete env.NPM_CONFIG_IGNORE_SCRIPTS;
+  try {
+    const result = await new Promise((resolve, reject) => {
+      const child = spawn(process.execPath, [alias], { env, stdio: ['ignore', 'pipe', 'pipe'] });
+      let stdout = '';
+      let stderr = '';
+      child.stdout.on('data', chunk => { stdout += chunk; });
+      child.stderr.on('data', chunk => { stderr += chunk; });
+      child.on('error', reject);
+      child.on('exit', (code, signal) => resolve({ code, signal, stdout, stderr }));
+    });
+    const logs = `${result.stdout}\n${result.stderr}`;
+    assert.equal(result.code, 0, logs);
+    assert.match(logs, /BAS destination setup was skipped because H2O_URL is not set/);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

@@ -30,7 +30,7 @@ async function fixtureProxy(logger = () => {}) {
   const directory = await mkdtemp(join(tmpdir(), 'bas-vsp-test-'));
   const log = join(directory, 'children.log');
   const destinations = ['alpha', 'beta'].map(name => ({ name, url: `http://${name}.dest`, client: '001' }));
-  const proxy = new MCPProxy({ binary: fixture, destinations, env: { ...process.env, BAS_VSP_DESTINATION: 'alpha', BAS_VSP_MODE: 'expert', FAKE_LOG: log, SAP_ALLOW_TRANSPORTABLE_EDITS: 'true', SAP_USER: 'must-not-pass', SAP_PASSWORD: 'must-not-pass', Authorization: 'Bearer must-not-pass', Cookie: 'secret', SAP_READ_ONLY: 'true' }, log: logger });
+  const proxy = new MCPProxy({ binary: fixture, destinations, env: { ...process.env, SAP_AI_DEV_TOOLKIT_DESTINATION: 'alpha', SAP_AI_DEV_TOOLKIT_MODE: 'expert', FAKE_LOG: log, SAP_ALLOW_TRANSPORTABLE_EDITS: 'true', SAP_USER: 'must-not-pass', SAP_PASSWORD: 'must-not-pass', Authorization: 'Bearer must-not-pass', Cookie: 'secret', SAP_READ_ONLY: 'true' }, log: logger });
   proxy.start();
   return { directory, log, proxy };
 }

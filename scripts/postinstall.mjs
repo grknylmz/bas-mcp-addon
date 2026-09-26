@@ -1,5 +1,5 @@
 import { open, readFile } from 'node:fs/promises';
-import { closeSync, openSync } from 'node:fs';
+import { closeSync, openSync, realpathSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ensureGo } from './ensure-go.mjs';
@@ -10,12 +10,14 @@ import { createInterface } from 'node:readline/promises';
 import { ReadStream as TTYReadStream, WriteStream as TTYWriteStream } from 'node:tty';
 import { homedir } from 'node:os';
 import { colorText, formatStatus } from '../src/terminal-ui.mjs';
+import { brandedEnvValue, withBrandedEnvironment } from '../src/branding.mjs';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const pkg = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'));
+const runtimeEnv = withBrandedEnvironment(process.env);
 
 async function announce(message, tone = 'info') {
-  const content = message.replace(/^bas-mcp-addon:\s*/, '');
+  const content = message.replace(/^sap-ai-dev-toolkit:\s*/, '');
   let terminal;
   try {
     terminal = await open(process.platform === 'win32' ? 'CONOUT$' : '/dev/tty', 'w');
@@ -61,7 +63,7 @@ async function withInstallTerminal(action) {
 }
 
 async function runInstallSetup() {
-  return withInstallTerminal(terminal => runSetup(terminal || undefined));
+  return withInstallTerminal(terminal => runSetup({ env: runtimeEnv, ...(terminal || {}) }));
 }
 
 async function runCopilotAssetInstall() {
@@ -74,9 +76,9 @@ async function runCopilotAssetInstall() {
     await announce([
       'Optional Copilot setup is waiting for your choice.',
       '',
-      'Press Enter to install the ABAP Developer agent and six skills in the path shown below; type n then press Enter to skip.',
+      'Press Enter to install the ABAP Developer agent and bundled skills in the path shown below; type n then press Enter to skip.',
       '',
-      `${colorText('✅ Press Enter', 'green', true)} to install the ABAP Developer agent and six skills.`,
+      `${colorText('✅ Press Enter', 'green', true)} to install the ABAP Developer agent and bundled skills.`,
       `${colorText('⏭️  Type n then Enter', 'yellow', true)} to skip this optional step.`,
       '',
       `${colorText('📁 Target folder:', 'cyan', true)}`,
@@ -86,7 +88,7 @@ async function runCopilotAssetInstall() {
     const prompt = createInterface({ input: terminal.input, output: terminal.output });
     let answer;
     try {
-      answer = await prompt.question(`${colorText('🤖 Install the ABAP Developer agent and six skills?', 'magenta', terminal.output)} ${colorText('[Y/n]', 'yellow', terminal.output)} `);
+      answer = await prompt.question(`${colorText('🤖 Install the ABAP Developer agent and bundled skills?', 'magenta', terminal.output)} ${colorText('[Y/n]', 'yellow', terminal.output)} `);
     } finally {
       prompt.close();
     }
@@ -149,16 +151,16 @@ export function destinationTable(destinations, registeredNames) {
 }
 async function announceSetup(result) {
   if (result?.reason === 'non-bas') {
-    await announce('BAS destination setup was skipped because H2O_URL is not set.\nMCP config was not changed.\nRun bas-vsp-mcp --setup from a BAS dev space when you are ready.', 'info');
+    await announce('BAS destination setup was skipped because H2O_URL is not set.\nMCP config was not changed.\nRun sap-ai-dev-toolkit --setup from a BAS dev space when you are ready.', 'info');
     return;
   }
   if (result?.reason === 'non-tty') {
-    await announce('Destination selection was skipped because npm did not provide an interactive terminal.\nMCP config was not changed.\nRun bas-vsp-mcp --setup from an interactive BAS terminal, or run npx --yes --ignore-scripts --package=bas-mcp-addon bas-vsp-mcp --setup --npx.', 'warning');
+    await announce('Destination selection was skipped because npm did not provide an interactive terminal.\nMCP config was not changed.\nRun sap-ai-dev-toolkit --setup from an interactive BAS terminal, or run npx --yes --ignore-scripts --package=sap-ai-dev-toolkit sap-ai-dev-toolkit --setup --npx.', 'warning');
     return;
   }
   if (result?.reason === 'no-destinations') {
     const details = (result.warnings || []).map(warning => `• ${warning}`).join('\n');
-    await announce(`No selectable BAS or Cloud Foundry destinations were found; MCP config was not changed.\nRun bas-vsp-mcp --setup to retry.${details ? `\n${details}` : ''}`, 'warning');
+    await announce(`No selectable BAS or Cloud Foundry destinations were found; MCP config was not changed.\nRun sap-ai-dev-toolkit --setup to retry.${details ? `\n${details}` : ''}`, 'warning');
     return;
   }
 
@@ -169,7 +171,7 @@ async function announceSetup(result) {
       'No MCP server entries are configured for this add-on.',
       `MCP config file: ${path}`,
       'No destinations were selected, so previously managed entries were removed. Other servers and settings were preserved.',
-      'Run bas-vsp-mcp --setup to choose destinations later.'
+      'Run sap-ai-dev-toolkit --setup to choose destinations later.'
     ].join('\n'), 'info');
     return;
   }
@@ -182,10 +184,10 @@ async function announceSetup(result) {
   const registeredNames = new Set(servers.map(([name]) => name));
   const entryDetails = servers.flatMap(([name, entry]) => {
     const destination = destinationsByServer.get(name);
-    const source = entry.env?.BAS_VSP_DESTINATION_SOURCE === 'cloud-foundry' || destination?.source === 'cloud-foundry'
+    const source = brandedEnvValue(entry.env, 'DESTINATION_SOURCE') === 'cloud-foundry' || destination?.source === 'cloud-foundry'
       ? 'Cloud Foundry'
       : 'BAS';
-    const destinationName = entry.env?.BAS_VSP_DESTINATION || destination?.name || 'unknown';
+    const destinationName = brandedEnvValue(entry.env, 'DESTINATION') || destination?.name || 'unknown';
     const client = destination?.client || '001';
     const authentication = destination?.authentication || 'unknown';
     const args = Array.isArray(entry.args) ? entry.args : [];
@@ -217,8 +219,8 @@ async function main() {
   if (process.env.npm_config_ignore_scripts === 'true') return;
 
   try {
-    if (process.env.BAS_VSP_BINARY) {
-      await announce('Using the BAS_VSP_BINARY override.', 'info');
+    if (brandedEnvValue(runtimeEnv, 'BINARY')) {
+      await announce('Using the SAP_AI_DEV_TOOLKIT_BINARY override.', 'info');
     } else {
       await announce('Checking for Go. The supported version installs automatically if needed; this may take a few minutes.', 'progress');
       try {
@@ -229,7 +231,7 @@ async function main() {
       }
       await announce('Preparing the pinned VSP runtime for this platform.', 'progress');
       try {
-        await installBinary(pkg);
+        await installBinary(pkg, { env: runtimeEnv });
         await announce('Pinned VSP binary installed and ready.', 'success');
       } catch (error) {
         throw new Error(`VSP binary provisioning failed: ${error.message}`);
@@ -237,7 +239,7 @@ async function main() {
     }
   } catch (error) {
     await announce(error.message, 'error');
-    await announce('Go is provisioned automatically. Set BAS_VSP_BINARY only when supplying a trusted prebuilt VSP executable.', 'info');
+    await announce('Go is provisioned automatically. Set SAP_AI_DEV_TOOLKIT_BINARY only when supplying a trusted prebuilt VSP executable.', 'info');
     process.exitCode = 1;
     return;
   }
@@ -248,8 +250,8 @@ async function main() {
     setupResult = await runInstallSetup();
     setupCompleted = true;
   } catch (error) {
-    await announce(`BAS MCP setup failed: ${error.message}`, 'error');
-    await announce('Rerun bas-vsp-mcp --setup.', 'info');
+    await announce(`SAP AI Dev Toolkit setup failed: ${error.message}`, 'error');
+    await announce('Rerun sap-ai-dev-toolkit --setup.', 'info');
   }
 
   try {
@@ -259,11 +261,9 @@ async function main() {
   }
   if (setupCompleted) await announceSetup(setupResult);
 }
-if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
+if (process.argv[1] && realpathSync(fileURLToPath(import.meta.url)) === realpathSync(resolve(process.argv[1]))) {
   main().catch(error => {
     console.error(formatStatus(`Postinstall failed: ${error.message}`, 'error', process.stderr));
     process.exitCode = 1;
   });
 }
-
-

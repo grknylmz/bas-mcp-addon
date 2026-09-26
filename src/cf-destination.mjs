@@ -7,11 +7,12 @@ import { ProxyAgent, fetch as undiciFetch } from 'undici';
 import { sanitizeChildEnv } from './bas-discovery.mjs';
 import { createCfConnectivityProxy } from './cf-connectivity.mjs';
 import { colorText, promptOutput, quietSpinnerTheme } from './terminal-ui.mjs';
+import { brandedEnvValue } from './branding.mjs';
 
 const REQUEST_TIMEOUT_MS = 10_000;
 const COMMAND_TIMEOUT_MS = 30_000;
 const execFile = promisify(nodeExecFile);
-const KEY_PREFIX = 'bas-mcp-addon-';
+const KEY_PREFIX = 'sap-ai-dev-toolkit-';
 
 function text(value) {
   return value == null ? '' : String(value).trim();
@@ -678,7 +679,7 @@ function cfServerName(env, name) {
 
 function validateRuntimeRecord(record, connectivityAvailable) {
   const reason = reasonFor(record, connectivityAvailable);
-  if (reason) throw new Error(`Configured CF destination is unavailable: ${reason}. Rerun bas-vsp-mcp --setup after correcting the Destination service record.`);
+  if (reason) throw new Error(`Configured CF destination is unavailable: ${reason}. Rerun sap-ai-dev-toolkit --setup after correcting the Destination service record.`);
 }
 
 async function verifyServiceInstance(instanceGuid, instanceName, spaceGuid, kind, options) {
@@ -698,9 +699,9 @@ export async function resolveConfiguredCloudFoundryDestination({ env = process.e
   const destinationInstanceGuid = configuredValue(env, 'BAS_CF_DESTINATION_INSTANCE_GUID');
   const destinationInstanceName = configuredValue(env, 'BAS_CF_DESTINATION_INSTANCE');
   const destinationKeyName = configuredValue(env, 'BAS_CF_DESTINATION_KEY');
-  const name = configuredValue(env, 'BAS_CF_DESTINATION_NAME') || configuredValue(env, 'BAS_VSP_DESTINATION');
+  const name = configuredValue(env, 'BAS_CF_DESTINATION_NAME') || text(brandedEnvValue(env, 'DESTINATION'));
   if (!spaceGuid || !destinationInstanceGuid || !destinationInstanceName || !destinationKeyName || !name) {
-    throw new Error('Cloud Foundry destination configuration is incomplete; rerun bas-vsp-mcp --setup.');
+    throw new Error('Cloud Foundry destination configuration is incomplete; rerun sap-ai-dev-toolkit --setup.');
   }
   const target = await getCloudFoundryTarget({ env, execFileImpl });
   if (!target.available) throw new Error(`${target.reason.replace(/; CF destinations were skipped\.$/, '')}; run cf target for the configured space and retry.`);
@@ -709,22 +710,22 @@ export async function resolveConfiguredCloudFoundryDestination({ env = process.e
   try {
     await verifyServiceInstance(destinationInstanceGuid, destinationInstanceName, spaceGuid, 'Destination', options);
   } catch {
-    throw new Error(`Configured Destination service instance ${destinationInstanceName} is unavailable in the configured CF space; rerun bas-vsp-mcp --setup.`);
+    throw new Error(`Configured Destination service instance ${destinationInstanceName} is unavailable in the configured CF space; rerun sap-ai-dev-toolkit --setup.`);
   }
   let destinationCredentials;
   try {
     destinationCredentials = await serviceKeyCredentials(destinationInstanceName, destinationKeyName, 'destination', options);
   } catch {
-    throw new Error(`Managed Destination service key ${destinationKeyName} for ${destinationInstanceName} is unavailable; rerun bas-vsp-mcp --setup in the configured space.`);
+    throw new Error(`Managed Destination service key ${destinationKeyName} for ${destinationInstanceName} is unavailable; rerun sap-ai-dev-toolkit --setup in the configured space.`);
   }
   let records;
   try {
     records = await destinationRecords(destinationCredentials, fetchImpl);
   } catch {
-    throw new Error(`Destination service instance ${destinationInstanceName} could not be read; verify CF login and rerun bas-vsp-mcp --setup.`);
+    throw new Error(`Destination service instance ${destinationInstanceName} could not be read; verify CF login and rerun sap-ai-dev-toolkit --setup.`);
   }
   const found = records.find(item => item.record.name === name);
-  if (!found || found.detailsFailed) throw new Error(`Destination ${name} is no longer available from instance ${destinationInstanceName}; rerun bas-vsp-mcp --setup.`);
+  if (!found || found.detailsFailed) throw new Error(`Destination ${name} is no longer available from instance ${destinationInstanceName}; rerun sap-ai-dev-toolkit --setup.`);
   const record = found.record;
   const serverName = cfServerName(env, name);
   const isOnPremise = record.proxyType === 'OnPremise';
@@ -742,20 +743,20 @@ export async function resolveConfiguredCloudFoundryDestination({ env = process.e
     const connectivityInstanceName = configuredValue(env, 'BAS_CF_CONNECTIVITY_INSTANCE');
     const connectivityKeyName = configuredValue(env, 'BAS_CF_CONNECTIVITY_KEY');
     if (!configuredValue(env, 'BAS_CF_CONNECTIVITY_INSTANCE_GUID') || !connectivityInstanceName || !connectivityKeyName) {
-      throw new Error(`Configured OnPremise destination ${name} has no Connectivity service reference; rerun bas-vsp-mcp --setup.`);
+      throw new Error(`Configured OnPremise destination ${name} has no Connectivity service reference; rerun sap-ai-dev-toolkit --setup.`);
     }
     try {
       await verifyServiceInstance(configuredValue(env, 'BAS_CF_CONNECTIVITY_INSTANCE_GUID'), connectivityInstanceName, spaceGuid, 'Connectivity', options);
     } catch {
-      throw new Error(`Configured Connectivity service instance ${connectivityInstanceName} is unavailable in the configured CF space; rerun bas-vsp-mcp --setup.`);
+      throw new Error(`Configured Connectivity service instance ${connectivityInstanceName} is unavailable in the configured CF space; rerun sap-ai-dev-toolkit --setup.`);
     }
     let credentials;
     try {
       credentials = await serviceKeyCredentials(connectivityInstanceName, connectivityKeyName, 'connectivity', options);
     } catch {
-      throw new Error(`Managed Connectivity service key ${connectivityKeyName} for ${connectivityInstanceName} is unavailable; rerun bas-vsp-mcp --setup in the configured space.`);
+      throw new Error(`Managed Connectivity service key ${connectivityKeyName} for ${connectivityInstanceName} is unavailable; rerun sap-ai-dev-toolkit --setup in the configured space.`);
     }
-    if (!connectivityCredentialsValid(credentials)) throw new Error(`Connectivity service credentials for ${connectivityInstanceName} are incomplete; rerun bas-vsp-mcp --setup.`);
+    if (!connectivityCredentialsValid(credentials)) throw new Error(`Connectivity service credentials for ${connectivityInstanceName} are incomplete; rerun sap-ai-dev-toolkit --setup.`);
     let route;
     try {
       const authMode = record.authentication === 'PrincipalPropagation' ? 'principal-propagation' : 'application';

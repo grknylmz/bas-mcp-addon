@@ -176,7 +176,7 @@ test('imports instance Destination records with redacted descriptors and disable
   });
 
   assert.equal(cf.createdKeys.length, 1);
-  assert.match(cf.createdKeys[0].keyName, /^bas-mcp-addon-[0-9a-f-]{36}$/);
+  assert.match(cf.createdKeys[0].keyName, /^sap-ai-dev-toolkit-[0-9a-f-]{36}$/);
   assert.deepEqual(result.createdKeys.map(({ kind, spaceGuid, instanceGuid, instanceName, keyName }) => [kind, spaceGuid, instanceGuid, instanceName, keyName]), [
     ['destination', SPACE_GUID, DESTINATION_GUID, DESTINATION_INSTANCE, cf.createdKeys[0].keyName]
   ]);
@@ -273,8 +273,8 @@ test('resolves a CF Basic destination only after matching the active space', asy
   const cf = mockCf({ origin });
   const env = {
     ...envForLocal(),
-    BAS_VSP_DESTINATION_SOURCE: 'cloud-foundry',
-    BAS_VSP_DESTINATION: 'runtime-basic',
+    SAP_AI_DEV_TOOLKIT_DESTINATION_SOURCE: 'cloud-foundry',
+    SAP_AI_DEV_TOOLKIT_DESTINATION: 'runtime-basic',
     BAS_CF_SPACE_GUID: SPACE_GUID,
     BAS_CF_DESTINATION_INSTANCE_GUID: DESTINATION_GUID,
     BAS_CF_DESTINATION_INSTANCE: DESTINATION_INSTANCE,

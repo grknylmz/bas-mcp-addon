@@ -1,6 +1,7 @@
 import { request as httpRequest } from 'node:http';
 import { request as httpsRequest } from 'node:https';
 import { ProxyAgent, fetch as undiciFetch } from 'undici';
+import { brandedEnvValue } from './branding.mjs';
 
 const SECRET_KEY = /^(authorization|cookie|set-cookie|username|user|sap[_-](user(name)?|password|pass|token|saml[_-]?(user|password)|cookie[_-]?(file|string)|browser[_-]?auth|sso|credential[_-]?cmd))$|.*(password|passwd|secret|bearer|credential).*/i;
 const DEFAULT_PROXY = 'http://127.0.0.1:8887';
@@ -191,10 +192,10 @@ export async function discoverDestinations(options = {}) {
   const body = options.body ?? await fetchDestinationList(env.H2O_URL, options);
   const list = listFromBody(body);
   if (!list) throw new Error(`Unrecognized BAS destination response shape; top-level keys: ${Object.keys(body || {}).map(String).join(', ') || '<none>'}`);
-  const allow = text(env.BAS_VSP_DESTINATION).split(',').map(value => value.trim().toLowerCase()).filter(Boolean);
+  const allow = text(brandedEnvValue(env, 'DESTINATION')).split(',').map(value => value.trim().toLowerCase()).filter(Boolean);
   const normalized = list.map(normalizeDestination).filter(item => item.name).filter(item => !allow.length || allow.includes(item.name.toLowerCase()));
   const proxyUrl = env.HTTP_PROXY || env.http_proxy || DEFAULT_PROXY;
-  const skipProbe = String(env.BAS_VSP_SKIP_PROBE || '').toLowerCase() === 'true' || options.skipProbe;
+  const skipProbe = String(brandedEnvValue(env, 'SKIP_PROBE') || '').toLowerCase() === 'true' || options.skipProbe;
   const result = [];
   for (const destination of normalized.sort((a, b) => a.name.localeCompare(b.name))) {
     const probe = await probeADT(destination, { ...options, proxyUrl, skipProbe });

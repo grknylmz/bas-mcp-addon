@@ -9,9 +9,11 @@ const skillsRoot = join(root, '.github', 'skills');
 const expectedSkills = [
   'abap-debugging',
   'abap-development',
+  'abap-runtime-analysis',
   'abap-testing-quality',
   'cds-development',
   'rap-development',
+  'rap-service-delivery',
   'sap-transport-release'
 ];
 

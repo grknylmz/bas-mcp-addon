@@ -129,9 +129,9 @@ test('launches a CF Basic destination with per-child credentials and no proxy-au
   const env = {
     ...process.env,
     ...cfEnv,
-    BAS_VSP_BINARY: fakeVsp,
-    BAS_VSP_DESTINATION_SOURCE: 'cloud-foundry',
-    BAS_VSP_DESTINATION: 'cf-basic',
+    SAP_AI_DEV_TOOLKIT_BINARY: fakeVsp,
+    SAP_AI_DEV_TOOLKIT_DESTINATION_SOURCE: 'cloud-foundry',
+    SAP_AI_DEV_TOOLKIT_DESTINATION: 'cf-basic',
     BAS_CF_SPACE_GUID: SPACE_GUID,
     BAS_CF_DESTINATION_INSTANCE_GUID: INSTANCE_GUID,
     BAS_CF_DESTINATION_INSTANCE: INSTANCE_NAME,
@@ -268,9 +268,9 @@ test('routes a PrincipalPropagation MCP call through CF Connectivity to the SAP 
   const result = await runLauncher({
     ...process.env,
     ...cfEnv,
-    BAS_VSP_BINARY: fakeVsp,
-    BAS_VSP_DESTINATION_SOURCE: 'cloud-foundry',
-    BAS_VSP_DESTINATION: 'pp-target',
+    SAP_AI_DEV_TOOLKIT_BINARY: fakeVsp,
+    SAP_AI_DEV_TOOLKIT_DESTINATION_SOURCE: 'cloud-foundry',
+    SAP_AI_DEV_TOOLKIT_DESTINATION: 'pp-target',
     BAS_CF_SPACE_GUID: SPACE_GUID,
     BAS_CF_DESTINATION_INSTANCE_GUID: INSTANCE_GUID,
     BAS_CF_DESTINATION_INSTANCE: INSTANCE_NAME,
@@ -420,9 +420,9 @@ test('routes a CF Basic OnPremise MCP call through the HTTP Connectivity proxy',
   const result = await runLauncher({
     ...process.env,
     ...cfEnv,
-    BAS_VSP_BINARY: fakeVsp,
-    BAS_VSP_DESTINATION_SOURCE: 'cloud-foundry',
-    BAS_VSP_DESTINATION: 'basic-onprem',
+    SAP_AI_DEV_TOOLKIT_BINARY: fakeVsp,
+    SAP_AI_DEV_TOOLKIT_DESTINATION_SOURCE: 'cloud-foundry',
+    SAP_AI_DEV_TOOLKIT_DESTINATION: 'basic-onprem',
     BAS_CF_SPACE_GUID: SPACE_GUID,
     BAS_CF_DESTINATION_INSTANCE_GUID: INSTANCE_GUID,
     BAS_CF_DESTINATION_INSTANCE: INSTANCE_NAME,
@@ -491,13 +491,13 @@ test('CF list-destinations clears the CF name filter and remains BAS-only', asyn
   const result = await runLauncher({
     ...process.env,
     ...cfEnv,
-    BAS_VSP_DESTINATION_SOURCE: 'cloud-foundry',
-    BAS_VSP_DESTINATION: 'cf-name-not-in-bas',
+    SAP_AI_DEV_TOOLKIT_DESTINATION_SOURCE: 'cloud-foundry',
+    SAP_AI_DEV_TOOLKIT_DESTINATION: 'cf-name-not-in-bas',
     H2O_URL: origin,
     HTTP_PROXY: '',
     HTTPS_PROXY: '',
     NO_PROXY: '127.0.0.1,localhost',
-    BAS_VSP_SKIP_PROBE: 'true'
+    SAP_AI_DEV_TOOLKIT_SKIP_PROBE: 'true'
   }, ['--list-destinations', '--json']);
   assert.equal(result.code, 0, result.stderr);
   assert.deepEqual(JSON.parse(result.stdout), [{ name: 'bas-only', client: '101', authentication: 'Unknown', probe: 'skipped' }]);

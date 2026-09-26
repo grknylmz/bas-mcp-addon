@@ -1,6 +1,6 @@
 ---
 name: ABAP Runtime Debugger
-description: Diagnose ABAP runtime failures, dumps, logs, traces, debugger sessions, call graphs, and performance symptoms using BAS MCP tools. Use for incidents, production-like defects, dumps, failed RAP/OData execution, and performance investigations.
+description: Diagnose ABAP runtime failures, dumps, logs, traces, debugger sessions, call graphs, and performance symptoms using SAP AI Dev Toolkit MCP tools. Use for incidents, production-like defects, dumps, failed RAP/OData execution, and performance investigations.
 target: vscode
 user-invocable: true
 ---

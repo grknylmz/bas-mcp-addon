@@ -1,12 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
-import { spawn } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { installMcpConfig } from '../src/mcp-config.mjs';
 import { destinationTable } from '../scripts/postinstall.mjs';
+import { spawnWithPty } from './pty.mjs';
 
 const setupModule = fileURLToPath(new URL('../src/setup.mjs', import.meta.url));
 
@@ -73,7 +73,7 @@ await runSetup({
     HOME: directory,
     PATH: `${bin}:${process.env.PATH || ''}`,
     H2O_URL: 'http://h2o.example',
-    BAS_VSP_MCP_CONFIG: configPath,
+    SAP_AI_DEV_TOOLKIT_MCP_CONFIG: configPath,
     CF_CALL_LOG: callLog,
     CF_DISCOVERY_LOG: discoveryLog,
     TEST_CF_VERSION: version,
@@ -90,7 +90,7 @@ await runSetup({
 function runSetupInPty(fixture, { importAnswer = 'y\r', selection = ' \r' } = {}) {
   return new Promise((resolve, reject) => {
     const command = `${JSON.stringify(process.execPath)} ${JSON.stringify(fixture.harness)}`;
-    const child = spawn('script', ['-qec', command, '/dev/null'], { env: fixture.env, stdio: ['pipe', 'pipe', 'pipe'] });
+    const child = spawnWithPty(command, { env: fixture.env, stdio: ['pipe', 'pipe', 'pipe'] });
     let stdout = '';
     let stderr = '';
     let importSent = false;
@@ -323,7 +323,7 @@ test('preserves old CF keys referenced by an unrelated remaining MCP entry', asy
   const config = JSON.parse(await readFile(fixture.configPath, 'utf8'));
   config.servers.customServer = {
     command: 'custom-launcher',
-    env: { ...config.servers[previous.serverName].env, BAS_VSP_DESTINATION_SOURCE: undefined }
+    env: { ...config.servers[previous.serverName].env, SAP_AI_DEV_TOOLKIT_DESTINATION_SOURCE: undefined }
   };
   await writeFile(fixture.configPath, JSON.stringify(config));
   fixture.env.TEST_BAS_DESTINATIONS = JSON.stringify([{

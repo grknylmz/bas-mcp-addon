@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
+import { brandedEnvValue } from './branding.mjs';
 
 const LEGACY_MCP_SERVER_PREFIX = 'basVspMcp_';
 
@@ -16,7 +17,8 @@ async function exists(path) {
 }
 
 export async function resolveMcpConfigPath(env = process.env) {
-  if (env.BAS_VSP_MCP_CONFIG) return env.BAS_VSP_MCP_CONFIG;
+  const configuredPath = brandedEnvValue(env, 'MCP_CONFIG');
+  if (configuredPath) return configuredPath;
   const home = env.HOME || homedir();
   const candidates = [
     join(home, '.vscode', 'data', 'User', 'mcp.json'),
@@ -33,7 +35,7 @@ export function generatedServerName(destinationName) {
 
 export function buildMcpEntries(destinations, env = process.env) {
   const h2oUrl = env.H2O_URL;
-  if (!h2oUrl) throw new Error('H2O_URL is required to write BAS MCP configuration');
+  if (!h2oUrl) throw new Error('H2O_URL is required to write SAP AI Dev Toolkit configuration');
   const entries = Object.create(null);
   const selected = [...destinations].sort((a, b) => String(a.serverName || a.name).localeCompare(String(b.serverName || b.name)));
   for (const destination of selected) {
@@ -48,8 +50,8 @@ export function buildMcpEntries(destinations, env = process.env) {
       const cf = destination.cf;
       if (!cf) throw new Error(`Cloud Foundry destination "${destination.name}" is missing service references`);
       Object.assign(entryEnv, {
-        BAS_VSP_DESTINATION_SOURCE: 'cloud-foundry',
-        BAS_VSP_DESTINATION: String(destination.name),
+        SAP_AI_DEV_TOOLKIT_DESTINATION_SOURCE: 'cloud-foundry',
+        SAP_AI_DEV_TOOLKIT_DESTINATION: String(destination.name),
         BAS_CF_SPACE_GUID: String(cf.spaceGuid),
         BAS_CF_DESTINATION_INSTANCE_GUID: String(cf.destinationInstanceGuid),
         BAS_CF_DESTINATION_INSTANCE: String(cf.destinationInstanceName),
@@ -64,11 +66,11 @@ export function buildMcpEntries(destinations, env = process.env) {
         });
       }
     } else {
-      entryEnv.BAS_VSP_DESTINATION = String(destination.name);
+      entryEnv.SAP_AI_DEV_TOOLKIT_DESTINATION = String(destination.name);
     }
     entries[name] = {
       type: 'stdio',
-      command: 'bas-vsp-mcp',
+      command: 'sap-ai-dev-toolkit',
       env: entryEnv,
       BAS_EXT: 'true'
     };
@@ -79,16 +81,29 @@ export function buildMcpEntries(destinations, env = process.env) {
 function isPackageLauncher(entry) {
   const npxLauncher = entry?.command === 'npx'
     && Array.isArray(entry.args)
-    && entry.args.includes('bas-vsp-mcp')
-    && entry.args.some(argument => typeof argument === 'string' && (argument === '--package=bas-mcp-addon' || /^--package=bas-mcp-addon@[^/]+$/.test(argument)));
-  return entry?.BAS_EXT === 'true' && (entry?.command === 'bas-vsp-mcp' || npxLauncher);
+    && entry.args.some(argument => argument === 'sap-ai-dev-toolkit' || argument === 'bas-vsp-mcp')
+    && entry.args.some(argument => typeof argument === 'string' && (
+      argument === '--package=sap-ai-dev-toolkit'
+      || /^--package=sap-ai-dev-toolkit@[^/]+$/.test(argument)
+      || argument === '--package=bas-mcp-addon'
+      || /^--package=bas-mcp-addon@[^/]+$/.test(argument)
+    ));
+  return entry?.BAS_EXT === 'true' && (entry?.command === 'sap-ai-dev-toolkit' || entry?.command === 'bas-vsp-mcp' || npxLauncher);
+}
+
+function destinationValue(env) {
+  return env?.SAP_AI_DEV_TOOLKIT_DESTINATION ?? env?.BAS_VSP_DESTINATION;
+}
+
+function destinationSource(env) {
+  return env?.SAP_AI_DEV_TOOLKIT_DESTINATION_SOURCE ?? env?.BAS_VSP_DESTINATION_SOURCE;
 }
 
 function collectCloudFoundryKeyReferences(config, managedOnly) {
   const refs = new Map();
   for (const entry of Object.values(config?.servers || {})) {
     const e = entry?.env;
-    if (!e || (managedOnly && (e.BAS_VSP_DESTINATION_SOURCE !== 'cloud-foundry' || !isPackageLauncher(entry)))) continue;
+    if (!e || (managedOnly && (destinationSource(e) !== 'cloud-foundry' || !isPackageLauncher(entry)))) continue;
     const candidates = [
       { kind: 'destination', spaceGuid: e.BAS_CF_SPACE_GUID, instanceGuid: e.BAS_CF_DESTINATION_INSTANCE_GUID, instanceName: e.BAS_CF_DESTINATION_INSTANCE, keyName: e.BAS_CF_DESTINATION_KEY },
       { kind: 'connectivity', spaceGuid: e.BAS_CF_SPACE_GUID, instanceGuid: e.BAS_CF_CONNECTIVITY_INSTANCE_GUID, instanceName: e.BAS_CF_CONNECTIVITY_INSTANCE, keyName: e.BAS_CF_CONNECTIVITY_KEY }
@@ -164,15 +179,15 @@ export async function installMcpConfig(destinationsOrOptions, options = {}) {
   const servers = Object.create(null);
   for (const [name, entry] of Object.entries(config.servers)) {
     const managed = isPackageLauncher(entry)
-      && typeof entry?.env?.BAS_VSP_DESTINATION === 'string'
-      && (entry.env.BAS_VSP_DESTINATION_SOURCE === 'cloud-foundry'
+      && typeof destinationValue(entry?.env) === 'string'
+      && (destinationSource(entry.env) === 'cloud-foundry'
         ? typeof entry.env.BAS_CF_DESTINATION_KEY === 'string'
-        : entry.env.BAS_VSP_DESTINATION_SOURCE === undefined);
+        : destinationSource(entry.env) === undefined);
     if (!name.startsWith(LEGACY_MCP_SERVER_PREFIX) && !managed) servers[name] = entry;
   }
   for (const name of Object.keys(generated)) {
     if (Object.hasOwn(servers, name)) {
-      throw new Error(`MCP server "${name}" already exists and is not managed by bas-mcp-addon`);
+      throw new Error(`MCP server "${name}" already exists and is not managed by sap-ai-dev-toolkit`);
     }
   }
   config.servers = { ...servers, ...generated };
